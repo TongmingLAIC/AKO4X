@@ -128,6 +128,8 @@ The entry point depends on the kernel language:
 
 **Note for compiled languages (CUDA, C++):** The PyTorch reference implementation is in the `reference` field of `docs/definition.json`. Study it to understand the computation semantics before implementing the compiled kernel.
 
+**TVM FFI builder limitation:** The TVMFFIBuilder compiles `.cu`/`.cpp` files into a shared library but does not support linking external CUDA libraries (cuBLAS, cuDNN, etc.) — the `extra_ldflags` parameter is not passed to the underlying `tvm_ffi.cpp.build()`. To use these libraries, load them at runtime via `dlopen`/`dlsym` from within the `.cu` file. The entry point for compiled languages should use `kernel.cu::symbol_name` with `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)` to export the function.
+
 ## Customization
 
 ### Custom Task Template
@@ -228,8 +230,11 @@ conda env create -f environment.yml
 # Activate environment
 conda activate fi-bench
 
-# Install flashinfer-bench from source
+# Install flashinfer-bench from source (do NOT use `pip install flashinfer-bench` — PyPI lags behind)
 pip install git+https://github.com/flashinfer-ai/flashinfer-bench.git@main
+
+# Upgrade cupti-python for CUPTI profiling (PyPI default may be < 13.0)
+pip install -U cupti-python
 
 # Set dataset path (only needed for setup.py; child envs store it in config.toml)
 export FIB_DATASET_PATH=/path/to/flashinfer-trace
@@ -249,8 +254,11 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Install flashinfer-bench from source
+# Install flashinfer-bench from source (do NOT use `pip install flashinfer-bench` — PyPI lags behind)
 pip install git+https://github.com/flashinfer-ai/flashinfer-bench.git@main
+
+# Upgrade cupti-python for CUPTI profiling (PyPI default may be < 13.0)
+pip install -U cupti-python
 
 # Set dataset path (only needed for setup.py; child envs store it in config.toml)
 export FIB_DATASET_PATH=/path/to/flashinfer-trace
@@ -302,6 +310,8 @@ python setup.py --dataset /path/to/flashinfer-trace
 - **`cupti-python >= 13.0` installed, but CUDA driver < 13.0**: CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. This is **not** caught by the current fallback logic.
 
 An upstream fix in flashinfer to catch this runtime failure is pending but not yet merged. **Current workarounds**: ensure CUDA driver >= 13.0 when `cupti-python >= 13.0` is installed, or use the Modal backend (`--backend modal`).
+
+**⚠️ PyPI versions**: Do **not** install flashinfer-bench from PyPI (`pip install flashinfer-bench`) — the PyPI release (v0.1.2) lags behind the main branch and may lack recent fixes. Always install from source as shown above. Similarly, `pip install cupti-python` may default to a version < 13.0 (e.g. 12.8.0) which silently falls back to CUDA events — use `pip install -U cupti-python` to get >= 13.0.
 
 ## Requirements Summary
 

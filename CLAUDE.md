@@ -133,6 +133,7 @@ The benchmark system caches reference implementation performance on the first ru
 - Operator data (definition.json, workloads.jsonl, reference kernel) comes from the dataset at spawn time, not from static files in this repo
 - Benchmark scripts hardcode conda environment name `fi-bench` (the `conda run -n fi-bench` line in `scripts/bench.sh` and `scripts/bench_modal.sh`)
 - Local benchmarking uses CUPTI profiling via `cupti-python` (**requires both `cupti-python >= 13.0.0` and CUDA 13.0+ driver**). If `cupti-python` is not installed or its version is < 13.0, the benchmark gracefully falls back to CUDA events. However, when `cupti-python >= 13.0` is installed but the **CUDA driver** is < 13.0, CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. An upstream fix in flashinfer to catch this runtime failure is pending; until merged, ensure the CUDA driver is >= 13.0 when `cupti-python >= 13.0` is installed (or use Modal backend). CUPTI is strongly recommended for measurement accuracy — CUDA events fallback with low iteration counts (e.g. baseline's 20 iterations) can produce noisy results
+- **flashinfer-bench must be installed from source** (`pip install git+https://...@main`), not from PyPI. The PyPI release (v0.1.2) lags behind the main branch and may lack recent fixes (e.g. CUPTI fallback improvements, benchmark timing updates). The `cupti-python` package also defaults to a version < 13.0 on PyPI — run `pip install -U cupti-python` to get >= 13.0 for CUPTI support
 
 ## Entry Point Conventions
 
@@ -143,6 +144,14 @@ Entry points vary by language (configured in config.toml `entry_point` field):
 - **cpp**: `"binding.py::kernel"` — Python bindings file with `kernel()` function calling C++ code
 
 For compiled languages, the `binding.py` file uses TVM FFI (`from tvm.ffi import register_func`) to expose compiled code to Python.
+
+## TVM FFI Builder Limitations
+
+The TVMFFIBuilder (used for CUDA/C++ solutions) compiles `.cu`/`.cpp` files via `tvm_ffi.cpp.build()` but has a known limitation:
+
+- **No external library linking**: The builder does not pass `extra_ldflags` to the linker. Libraries like cuBLAS, cuDNN, etc. cannot be linked at compile time. The `BuildSpec.dependencies` field exists in the flashinfer-bench data model (with comments mentioning cuBLAS/cuDNN/CUTLASS support) but is not read by TVMFFIBuilder.
+- **Workaround**: Use `dlopen`/`dlsym` to load CUDA libraries at runtime from within the `.cu` file. For example, `cublasGemmEx` can be called via `dlopen("libcublas.so.12", RTLD_NOW)` + `dlsym`. Note: prefer `cublasGemmEx` (accepts `float*` alpha/beta) over `cublasHgemm` (accepts `__half*` alpha/beta) — the `__half` type may have ABI issues across shared library boundaries via dlopen.
+- **Entry point for compiled languages**: Use `kernel.cu::symbol_name` (not `binding.py::kernel`). The TVMFFIBuilder compiles `.cu` files and looks up the exported symbol via `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)`. The `binding.py` stub is packed but not used by the builder.
 
 ## ⚠️ Custom Dataset Requirements
 
