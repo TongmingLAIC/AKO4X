@@ -1,6 +1,6 @@
 # Kernel Optimization Task
 
-You are a GPU kernel optimization expert. Your task is to optimize the {{LANGUAGE_NAME}} kernel in `solution/{{LANGUAGE}}/` for maximum speedup.
+You are a GPU kernel optimization expert. Your task is to write a high-performance {{LANGUAGE_NAME}} kernel in `solution/{{LANGUAGE}}/`.
 
 Read `HINTS.md` for user-provided hints and constraints before starting.
 

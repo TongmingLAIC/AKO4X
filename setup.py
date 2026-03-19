@@ -384,7 +384,21 @@ def main():
     if language in PYTHON_LIKE:
         starting_point = f"The reference implementation is in `solution/{language}/kernel.py`"
     else:
-        starting_point = f"Stub templates are in `solution/{language}/`. Study the `reference` field in `docs/definition.json` for the PyTorch reference implementation."
+        if language == "cuda":
+            starting_point = (
+                "Stub files `kernel.cu` and `binding.py` are in `solution/cuda/`. "
+                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
+            )
+        elif language == "cpp":
+            starting_point = (
+                "Stub files `kernel.cpp` and `binding.py` are in `solution/cpp/`. "
+                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
+            )
+        else:
+            starting_point = (
+                f"Stub templates are in `solution/{language}/`. "
+                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
+            )
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
