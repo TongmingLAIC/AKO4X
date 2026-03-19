@@ -132,7 +132,7 @@ The benchmark system caches reference implementation performance on the first ru
 - `config.toml`: `destination_passing_style = false` by default
 - Operator data (definition.json, workloads.jsonl, reference kernel) comes from the dataset at spawn time, not from static files in this repo
 - Benchmark scripts hardcode conda environment name `fi-bench` (the `conda run -n fi-bench` line in `scripts/bench.sh` and `scripts/bench_modal.sh`)
-- Local benchmarking uses CUPTI profiling via `cupti-python` (requires CUDA 13.0+ driver; falls back to CUDA events on older drivers)
+- Local benchmarking uses CUPTI profiling via `cupti-python` (**requires CUDA 13.0+ driver**). If `cupti-python` is not installed or its version is < 13.0, the benchmark gracefully falls back to CUDA events at import time. However, when `cupti-python` is installed and passes the import check but the **CUDA driver** is < 13.0, CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. An upstream fix in flashinfer-src to catch this runtime failure is pending; until merged, CUDA 13.0+ driver is required for local benchmarking (or use Modal backend)
 
 ## Entry Point Conventions
 

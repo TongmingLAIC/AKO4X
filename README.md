@@ -211,7 +211,7 @@ bash scripts/bench.sh --force-baseline    # Force re-profile reference
 ### Prerequisites
 
 - **NVIDIA GPU**: CUDA-capable GPU (A100, H100, B200, etc.)
-- **CUDA Driver**: 13.0+ recommended for CUPTI profiling via `cupti-python` (falls back to CUDA events on older drivers)
+- **CUDA Driver**: 13.0+ **required** for CUPTI profiling via `cupti-python`. If `cupti-python` is not installed or version < 13.0, benchmarking falls back to CUDA events automatically. But if the **driver** is < 13.0 while `cupti-python` passes import checks, CUPTI fails at runtime — see note below
 - **Python**: 3.10 – 3.13 (3.12 recommended)
 - **Conda**: For environment management
 
@@ -278,19 +278,23 @@ nvidia-smi
 # Check flashinfer-bench
 python -c "import flashinfer_bench; print(flashinfer_bench.__version__)"
 
-# Check CUPTI profiling support (requires CUDA 13.0+ driver; falls back to CUDA events)
+# Check CUPTI profiling support (requires CUDA 13.0+ driver)
 python -c "
 try:
     from cupti import cupti; cupti.get_timestamp(); print('CUPTI: available')
 except Exception as e:
-    print(f'CUPTI: unavailable ({e}), will use CUDA events fallback')
+    print(f'CUPTI: unavailable ({e}) — CUDA 13.0+ driver required for local benchmarking')
 "
 
 # List available operators
 python setup.py --dataset /path/to/flashinfer-trace
 ```
 
-**⚠️ Note**: Local benchmarking uses CUPTI profiling by default, which requires a **CUDA 13.0+ driver** and `cupti-python`. On older drivers (CUDA 12.x), profiling automatically falls back to CUDA events. For best accuracy, use a CUDA 13.0+ driver or the Modal backend (`--backend modal`).
+**⚠️ Note**: Local benchmarking uses CUPTI profiling by default via `cupti-python`. There are two fallback scenarios:
+- **`cupti-python` not installed or version < 13.0**: Benchmarking gracefully falls back to CUDA events at import time. This works fine.
+- **`cupti-python` installed & version OK, but CUDA driver < 13.0**: CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. This is **not** caught by the current fallback logic.
+
+An upstream fix in flashinfer-src to catch this runtime failure is pending but not yet merged. **Current workarounds**: upgrade to a CUDA 13.0+ driver or use the Modal backend (`--backend modal`).
 
 ## Requirements Summary
 
@@ -299,7 +303,7 @@ See **Installation** section above for detailed setup instructions.
 **Quick reference:**
 
 **Local backend (default):**
-- NVIDIA GPU with CUDA 13.0+ driver recommended (CUPTI profiling; falls back to CUDA events)
+- NVIDIA GPU with CUDA 13.0+ driver **required** for CUPTI profiling (import-level fallback works if `cupti-python` is missing/old, but driver < 13.0 causes runtime failure — see note above)
 - Conda environment named `fi-bench` (hardcoded in `scripts/bench.sh`)
 - Dataset path (stored in child env's `config.toml` at spawn time; `FIB_DATASET_PATH` env var as fallback)
 
