@@ -60,8 +60,11 @@ python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
 # CUDA kernel from scratch (creates stub templates)
 python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language cuda
 
-# TileLang kernel (extracts reference, like triton)
+# TileLang kernel (requires `pip install tilelang` in fi-bench env)
 python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language tilelang
+
+# CuTe DSL kernel (requires `pip install nvidia-cutlass-dsl`; use --language python)
+python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language python
 
 # Legacy flag aliases still work (--prompt → --task, --info → --hints)
 python setup.py --operator my_op --prompt ./my_task.md --info ./my_hints.md
@@ -127,6 +130,11 @@ The entry point depends on the kernel language:
   - Entry function is `kernel(...)` in binding.py
 
 **Note for compiled languages (CUDA, C++):** The PyTorch reference implementation is in the `reference` field of `docs/definition.json`. Study it to understand the computation semantics before implementing the compiled kernel.
+
+**Note on additional packages:** Some languages require extra packages in the `fi-bench` environment:
+- **TileLang**: `pip install tilelang` — without it, solutions report COMPILE_ERROR
+- **CuTe DSL**: `pip install nvidia-cutlass-dsl` — use `--language python` since CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
+- **Triton**: Pre-installed with PyTorch, no extra installation needed
 
 **TVM FFI builder limitation:** The TVMFFIBuilder compiles `.cu`/`.cpp` files into a shared library but does not support linking external CUDA libraries (cuBLAS, cuDNN, etc.) — the `extra_ldflags` parameter is not passed to the underlying `tvm_ffi.cpp.build()`. To use these libraries, load them at runtime via `dlopen`/`dlsym` from within the `.cu` file. The entry point for compiled languages should use `kernel.cu::symbol_name` with `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)` to export the function.
 

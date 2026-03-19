@@ -64,6 +64,14 @@ This distinction is defined in `setup.py` as:
 PYTHON_LIKE = {"python", "triton", "tilelang"}
 ```
 
+### Additional Package Requirements
+
+Some languages require extra packages to be installed in the `fi-bench` conda environment:
+
+- **tilelang**: Requires `pip install tilelang`. Without it, `TileLangBuilder` is not registered and all workloads report COMPILE_ERROR.
+- **CuTe DSL** (NVIDIA CUTLASS Python DSL): Requires `pip install nvidia-cutlass-dsl`. Use `--language python` — CuTe DSL kernels are defined in Python via `@CuTeDSL.kernel` / `@CuTeDSL.jit` decorators and compiled at runtime to PTX. Torch tensors are passed to CuTe DSL via `cutlass.cute.runtime.from_dlpack()`.
+- **triton**: Pre-installed with PyTorch, no extra installation needed.
+
 ## How setup.py Works
 
 1. Parses `--operator`, `--mode`, `--backend`, `--language`, `--gpu`, `--agent`, `--kernel`, `--name`, `--dataset`, `--task`, `--hints`
