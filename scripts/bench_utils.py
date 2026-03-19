@@ -93,6 +93,11 @@ def save_baseline(results: dict):
             if lat_ms is not None:
                 workloads[uuid] = {"reference_latency_ms": lat_ms}
 
+    if not workloads:
+        print("WARNING: Reference baseline produced no valid latencies, skipping cache.",
+              file=sys.stderr)
+        return
+
     data = {
         "operator": operator,
         "benchmark_config": {
@@ -232,6 +237,9 @@ def run_and_report(
             return
         save_baseline(baseline_results)
         baseline = load_baseline()
+        if baseline is None:
+            print("WARNING: Reference baseline failed for all workloads — cannot compute speedup.",
+                  file=sys.stderr)
 
     # Phase 2: Benchmark the actual solution with high iterations
     print("\nUsing cached reference baseline...")
@@ -240,7 +248,8 @@ def run_and_report(
     if not results:
         print("No results returned!")
         return
-    results = inject_baseline(results, baseline)
+    if baseline is not None:
+        results = inject_baseline(results, baseline)
 
     score = compute_score(results)
     print_results(results, score)
