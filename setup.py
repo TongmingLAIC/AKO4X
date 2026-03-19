@@ -226,7 +226,7 @@ def populate_child(child_dir, *, language, operator, gpu, mode, backend, kernel_
         (child_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     # Copy common files
-    shutil.copy2(PARENT_DIR / ".gitignore", child_dir / ".gitignore")
+    shutil.copy2(PARENT_DIR / "templates" / "gitignore", child_dir / ".gitignore")
     shutil.copy2(definition_path, child_dir / "docs" / "definition.json")
     shutil.copy2(workloads_path, child_dir / "docs" / "workloads.jsonl")
     shutil.copy2(PARENT_DIR / "scripts" / "pack_solution.py", child_dir / "scripts" / "pack_solution.py")

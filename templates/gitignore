@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled language build artifacts
+*.so
+*.o
+*.a
+*.dylib
+
+# Benchmark artifacts
+trajectory/
+solution.json
+baseline.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~

@@ -17,10 +17,11 @@ kernel-opt-agent/
 ├── CLAUDE.md                          # This file (developer guide for the template repo)
 ├── README.md                          # Human-facing usage guide
 ├── setup.py                           # Creates isolated child environments
-├── .gitignore                         # Git ignore rules (copied to children)
+├── .gitignore                         # Git ignore rules for this template repo
 ├── templates/
 │   ├── task.md                        # Main task template (assembled into CLAUDE.md at spawn)
 │   ├── hints.md                       # Default HINTS.md template (copied to children)
+│   ├── gitignore                      # .gitignore template for child environments
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
