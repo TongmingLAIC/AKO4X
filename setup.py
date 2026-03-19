@@ -203,7 +203,10 @@ def render_template(task_text, placeholders):
     for line in task_text.splitlines(keepends=True):
         stripped = line.strip()
         if stripped in block_keys:
-            content = placeholders[stripped]
+            try:
+                content = placeholders[stripped]
+            except KeyError:
+                raise KeyError(f"Missing placeholder value for {stripped!r} in template rendering")
             lines.append(content)
             if not content.endswith("\n"):
                 lines.append("\n")
@@ -235,16 +238,14 @@ def populate_child(child_dir, *, language, operator, gpu, mode, backend, kernel_
     # Generate config.toml with per-language entry_point
     if language in PYTHON_LIKE:
         entry_point = "kernel.py::run"
-    elif language == "cuda":
+    elif language in ("cuda", "cpp"):
         entry_point = "binding.py::kernel"
-    elif language == "cpp":
-        entry_point = "binding.py::kernel"  # C++ also uses Python bindings
     else:
         entry_point = "kernel.py::run"  # fallback
     dataset_line = f'dataset_path = "{dataset_path.resolve()}"\n' if backend == "local" else ""
     config_toml = (
         f'[solution]\n'
-        f'name = "{operator}-reference"\n'
+        f'name = "{operator}-solution"\n'
         f'definition = "{operator}"\n'
         f'author = "user"\n'
         f'\n'
@@ -384,21 +385,12 @@ def main():
     if language in PYTHON_LIKE:
         starting_point = f"The reference implementation is in `solution/{language}/kernel.py`"
     else:
-        if language == "cuda":
-            starting_point = (
-                "Stub files `kernel.cu` and `binding.py` are in `solution/cuda/`. "
-                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
-            )
-        elif language == "cpp":
-            starting_point = (
-                "Stub files `kernel.cpp` and `binding.py` are in `solution/cpp/`. "
-                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
-            )
-        else:
-            starting_point = (
-                f"Stub templates are in `solution/{language}/`. "
-                "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
-            )
+        ext = {"cuda": ".cu", "cpp": ".cpp"}.get(language, "")
+        kernel_file = f"kernel{ext}" if ext else "kernel source"
+        starting_point = (
+            f"Stub files `{kernel_file}` and `binding.py` are in `solution/{language}/`. "
+            "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
+        )
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {

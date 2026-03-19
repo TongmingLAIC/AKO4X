@@ -2,7 +2,7 @@
 # Quick benchmark runner (Modal B200 backend)
 # Usage: bash scripts/bench.sh [label] [--force-baseline]
 # (This is bench_modal.sh in the template repo, deployed as bench.sh in child environments)
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 # Parse arguments: first positional arg is label, --force-baseline is a flag
 ARGS=()

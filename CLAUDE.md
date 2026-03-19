@@ -27,8 +27,11 @@ kernel-opt-agent/
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
 │   ├── stubs/
-│   │   └── cuda/                      # Stub templates for CUDA scratch mode
-│   │       ├── kernel.cu
+│   │   ├── cuda/                      # Stub templates for CUDA scratch mode
+│   │   │   ├── kernel.cu
+│   │   │   └── binding.py
+│   │   └── cpp/                       # Stub templates for C++ scratch mode
+│   │       ├── kernel.cpp
 │   │       └── binding.py
 │   └── agent/
 │       └── claude.json                # Claude Code agent config (output filenames + permissions)
@@ -114,6 +117,7 @@ Templates use these placeholders (replaced at spawn time):
 | `{{NUM_WORKLOADS}}` | count of workloads | `23` |
 | `{{SHAPE_SUMMARY}}` | auto-formatted input/output shapes | `Key shapes: ...` |
 | `{{WORKLOAD_SUMMARY}}` | distribution of variable axes | `Workloads: num_tokens in {1(x1),...}` |
+| `{{STARTING_POINT}}` | language-dependent starting point description | `The reference implementation is in...` |
 
 ## How to Modify Templates
 
@@ -159,7 +163,7 @@ The TVMFFIBuilder (used for CUDA/C++ solutions) compiles `.cu`/`.cpp` files via 
 
 - **No external library linking**: The builder does not pass `extra_ldflags` to the linker. Libraries like cuBLAS, cuDNN, etc. cannot be linked at compile time. The `BuildSpec.dependencies` field exists in the flashinfer-bench data model (with comments mentioning cuBLAS/cuDNN/CUTLASS support) but is not read by TVMFFIBuilder.
 - **Workaround**: Use `dlopen`/`dlsym` to load CUDA libraries at runtime from within the `.cu` file. For example, `cublasGemmEx` can be called via `dlopen("libcublas.so.12", RTLD_NOW)` + `dlsym`. Note: prefer `cublasGemmEx` (accepts `float*` alpha/beta) over `cublasHgemm` (accepts `__half*` alpha/beta) — the `__half` type may have ABI issues across shared library boundaries via dlopen.
-- **Entry point for compiled languages**: Use `kernel.cu::symbol_name` (not `binding.py::kernel`). The TVMFFIBuilder compiles `.cu` files and looks up the exported symbol via `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)`. The `binding.py` stub is packed but not used by the builder.
+- **Entry point for compiled languages**: The default entry point is `binding.py::kernel`, which uses Python bindings via TVM FFI. Alternatively, you can use `kernel.cu::symbol_name` to have the TVMFFIBuilder compile `.cu` files and look up the exported symbol directly via `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)`. When using this approach, the `binding.py` stub is packed but not used by the builder.
 
 ## ⚠️ Custom Dataset Requirements
 

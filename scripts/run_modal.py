@@ -30,8 +30,8 @@ _config_path = PROJECT_ROOT / "config.toml"
 if _config_path.exists():
     with open(_config_path, "rb") as _f:
         _config = tomllib.load(_f)
-    _GPU_TYPE = _config["build"].get("gpu", "b200").upper()
-    _language = _config["build"].get("language", "triton")
+    _GPU_TYPE = _config.get("build", {}).get("gpu", "b200").upper()
+    _language = _config.get("build", {}).get("language", "triton")
 else:
     _GPU_TYPE = "B200"
     _language = "triton"
@@ -46,8 +46,10 @@ TRACE_SET_PATH = "/data"
 
 # Base deps for all languages
 _pip_deps = ["torch", "numpy", "cupti-python"]
-if _language in ("triton", "tilelang"):
+if _language == "triton":
     _pip_deps.append("triton")
+if _language == "tilelang":
+    _pip_deps.append("tilelang")
 if _language in ("cuda", "cpp"):
     _pip_deps.append("tvm-ffi-ct")
 

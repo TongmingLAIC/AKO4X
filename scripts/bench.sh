@@ -1,7 +1,7 @@
 #!/bin/bash
 # Quick benchmark runner
 # Usage: bash scripts/bench.sh [label] [--force-baseline]
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 # Parse arguments: first positional arg is label, --force-baseline is a flag
 ARGS=()

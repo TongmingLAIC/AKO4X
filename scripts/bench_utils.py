@@ -6,6 +6,7 @@ and the two-phase benchmark orchestration used by both run_local.py and run_moda
 """
 
 import json
+import math
 import shutil
 import sys
 import tempfile
@@ -66,7 +67,11 @@ def load_baseline() -> dict | None:
     if not BASELINE_PATH.exists():
         return None
 
-    baseline = json.loads(BASELINE_PATH.read_text())
+    try:
+        baseline = json.loads(BASELINE_PATH.read_text())
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"Warning: Failed to parse baseline.json ({e}), will re-profile.", file=sys.stderr)
+        return None
 
     # Staleness check: cached workload UUIDs must match current workloads
     current_uuids = get_workload_uuids()
@@ -125,7 +130,7 @@ def inject_baseline(results: dict, baseline: dict) -> dict:
                     continue
                 result["reference_latency_ms"] = ref_ms
                 sol_ms = result.get("latency_ms")
-                if sol_ms and sol_ms > 0:
+                if sol_ms is not None and sol_ms > 0:
                     result["speedup_factor"] = ref_ms / sol_ms
     return results
 
@@ -299,6 +304,10 @@ def compute_score(results: dict) -> dict:
             status = result.get("status", "")
             if status == "PASSED" and result.get("speedup_factor") is not None:
                 sf = result["speedup_factor"]
+                if math.isnan(sf):
+                    all_valid = False
+                    error += 1
+                    continue
                 all_speedups.append(sf)
                 passed += 1
                 grp = uuid_to_group.get(uuid, "?")

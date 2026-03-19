@@ -49,7 +49,7 @@ Full definition: `docs/definition.json` | Workloads: `docs/workloads.jsonl` ({{N
 **Score = mean speedup across all {{NUM_WORKLOADS}} workloads.** All must PASS for a valid score.
 
 1. Run `bash scripts/bench.sh "baseline"` to establish baseline
-2. Analyze kernel + operator spec in `docs/definition.json`
+2. Study the operator spec in `docs/definition.json`
 3. Modify kernel -> bench -> analyze -> iterate
 4. Roll back on regression; check per-group breakdown to target weak workloads
 5. Stop when no further improvements found; summarize results
