@@ -29,6 +29,16 @@ bash scripts/bench.sh
 
 Label runs for tracking: `bash scripts/bench.sh "description"` saves to `trajectory/YYYYMMDD_HHMMSS_description/`.
 
+**Commit after each successful benchmark.** When all workloads PASS (no FAILED/ERROR), commit your kernel changes with this format:
+
+```
+bench(<score>): <one-line description of what changed>
+
+Trajectory: <folder_name>
+```
+
+This makes `git log --oneline` a concise optimization history. Review it before starting: `git log --oneline`.
+
 ## Operator
 
 `{{OPERATOR}}`: {{OPERATOR_DESCRIPTION}}
@@ -48,8 +58,9 @@ Full definition: `docs/definition.json` | Workloads: `docs/workloads.jsonl` ({{N
 
 **Score = mean speedup across all {{NUM_WORKLOADS}} workloads.** All must PASS for a valid score.
 
-1. Run `bash scripts/bench.sh "baseline"` to establish baseline
-2. Study the operator spec in `docs/definition.json`
-3. Modify kernel -> bench -> analyze -> iterate
-4. Roll back on regression; check per-group breakdown to target weak workloads
-5. Stop when no further improvements found; summarize results
+1. `git log --oneline` to review optimization history (if resuming)
+2. Run `bash scripts/bench.sh "baseline"` to establish baseline
+3. Study the operator spec in `docs/definition.json`
+4. Modify kernel -> bench -> if all PASS, commit -> analyze -> iterate
+5. Roll back on regression; check per-group breakdown to target weak workloads
+6. Stop when no further improvements found; summarize results
