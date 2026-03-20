@@ -45,7 +45,7 @@ def _load_benchmark_config() -> dict:
         config = tomllib.load(f)
     bench = config.get("benchmark", {})
     return {
-        "baseline_iterations": bench.get("baseline_iterations", 20),
+        "baseline_iterations": bench.get("baseline_iterations", 100),
         "solution_iterations": bench.get("solution_iterations", 100),
         "num_trials": bench.get("num_trials", 5),
         "warmup_runs": bench.get("warmup_runs", 3),

@@ -83,13 +83,15 @@ Benchmark iteration counts are configured in the `[benchmark]` section of `confi
 
 ```toml
 [benchmark]
-baseline_iterations = 20    # reference profiling iterations
+baseline_iterations = 100   # reference profiling iterations
 solution_iterations = 100   # solution profiling iterations
 num_trials = 5
 warmup_runs = 3
 ```
 
 CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `baseline_iterations` and `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
+
+> **Modal backend note**: On Modal, CUPTI activity tracing with high iteration counts on slow kernels (e.g. the PyTorch reference) can cause CUPTI buffer bloat, leading to inflated and inaccurate timings. If you observe this, lower `baseline_iterations` (e.g. to `20`) in `config.toml`. This issue does not affect local benchmarking.
 
 ## Agent Permissions
 

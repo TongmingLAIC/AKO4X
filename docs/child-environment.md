@@ -40,7 +40,7 @@ The agent updates these fields to match its kernel files:
 
 The `[benchmark]` section controls iteration counts:
 
-- **`baseline_iterations`**: Reference profiling iterations (default: `20`, low to avoid CUPTI cache explosion)
+- **`baseline_iterations`**: Reference profiling iterations (default: `100`)
 - **`solution_iterations`**: Solution profiling iterations (default: `100`, higher for accuracy)
 - **`num_trials`**: Number of trials per workload (default: `5`)
 - **`warmup_runs`**: Warmup runs before timing (default: `3`)
