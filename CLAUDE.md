@@ -4,7 +4,7 @@ This is the **template repository** for spawning isolated GPU kernel optimizatio
 It is NOT an optimization environment itself — use `spawn.py` to create one.
 
 For user-facing documentation (installation, usage, language support, benchmarking, troubleshooting),
-see [README.md](README.md).
+see [README.md](README.md) and the [docs/](docs/) directory.
 
 ## Architecture Overview
 
@@ -31,6 +31,12 @@ AKO4FIB has three layers:
 AKO4FIB/
 ├── spawn.py                           # Creates isolated child environments
 ├── pyproject.toml                     # Package metadata and dependencies
+├── docs/                              # User-facing documentation
+│   ├── getting-started.md             # Prerequisites, installation, Modal setup
+│   ├── usage.md                       # spawn.py options, modes, language selection
+│   ├── child-environment.md           # Structure, config.toml, benchmarking, profiling
+│   ├── custom-datasets.md             # Dataset schema and reference requirements
+│   └── troubleshooting.md             # CUPTI, TVM FFI, version issues
 ├── templates/
 │   ├── task.md                        # Main task template (assembled into child's CLAUDE.md)
 │   ├── hints.md                       # Default HINTS.md template (copied to children)
@@ -85,6 +91,7 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Hints template | `templates/hints.md` |
 | config.toml defaults | `populate_child()` in `spawn.py` (inline string) |
 | Benchmark scripts | `scripts/bench.sh`, `scripts/bench_modal.sh`, etc. |
+| User-facing docs | `docs/*.md` |
 
 ## Agent Config System
 
@@ -104,7 +111,7 @@ Each agent type has a JSON config in `templates/agent/` (currently only `claude.
 1. Create `templates/languages/{name}.md` with language-specific patterns and constraints
 2. Update `templates/fragments/language-guide.md` — add a row to the quick reference table
 3. Update `infer_language()` in `spawn.py` if the file extension is new
-4. Update the language table in `README.md`
+4. Update the language table in `docs/usage.md` and the features list in `README.md`
 5. No changes needed in bench scripts — flashinfer-bench handles compilation via its builder system
 
 ### Adding a New Agent Type
