@@ -470,12 +470,10 @@ def main():
     print()
     print("Next steps:")
     print(f"  cd {child_dir}")
+    print(f"  claude")
     print()
-    print("  # Start your code agent, e.g.:")
-    print("  claude")
-    print()
-    print("To run benchmark manually:")
-    print("  bash scripts/bench.sh")
+    print("  # Then send a prompt to start optimizing, e.g.:")
+    print('  > Read CLAUDE.md and optimize the kernel. Try your best.')
     print("=======================================")
 
 
