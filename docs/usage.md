@@ -1,5 +1,7 @@
 # Usage Guide
 
+> **Note**: AKO4FIB currently ships with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as the default agent. Community contributions for other agents are welcome — see the [roadmap](../README.md#contributing).
+
 ## spawn.py Options
 
 ```bash
@@ -9,7 +11,7 @@ python spawn.py \
   [--mode scratch|existing] \       # default: scratch
   [--backend local|modal] \         # default: local
   [--gpu <name>] \                  # local: auto-detected; modal: required
-  [--agent claude] \                # default: claude
+  [--agent claude] \                # currently only claude is shipped
   [--kernel /path/to/kernel.py] \   # required for existing mode
   [--name <label>]                  # optional label for the run
 ```
@@ -32,7 +34,7 @@ python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
 python spawn.py --operator moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048 \
     --backend modal --gpu b200 --name "moe_b200"
 
-# Custom dataset
+# Custom dataset (see https://bench.flashinfer.ai/docs/tutorials/bring-your-own-kernel)
 python spawn.py --operator my_custom_op --dataset /path/to/my/traceset
 ```
 
@@ -53,10 +55,10 @@ When using `--mode existing --kernel /path/to/kernel`:
 
 ## Language Selection
 
-The child environment is **language-agnostic**. The agent chooses the kernel language at runtime and updates `config.toml` accordingly.
+The child environment supports multiple kernel languages. By default, the agent selects a language based on the operator characteristics, but you can guide this choice via `HINTS.md` or your initial prompt.
 
 ### Supported Languages
-
+ 
 | Language | Files in `solution/` | config.toml `language` | config.toml `entry_point` |
 |----------|---------------------|----------------------|--------------------------|
 | Python / PyTorch | `kernel.py` | `python` | `kernel.py::run` |
@@ -66,29 +68,37 @@ The child environment is **language-agnostic**. The agent chooses the kernel lan
 | CUDA | `kernel.cu` + `binding.py` | `cuda` | `binding.py::kernel` |
 | C++ | `kernel.cpp` + `binding.py` | `cpp` | `binding.py::kernel` |
 
-For compiled languages (CUDA, C++), `binding.py` uses TVM FFI (`from tvm.ffi import register_func`) to expose compiled code to Python. Alternatively, use `kernel.cu::symbol_name` with `TVM_FFI_DLL_EXPORT_TYPED_FUNC` to export the function directly.
-
 ### Package Requirements
 
 Some languages require extra packages:
 
 - **TileLang**: `pip install tilelang` — without it, solutions report COMPILE_ERROR
 - **CuTe DSL**: `pip install nvidia-cutlass-dsl` — CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
-- **Triton**: Pre-installed with PyTorch, no extra installation needed
-
-### Guiding Language Choice
-
-To steer the agent toward a specific language, edit `HINTS.md` in the child environment before launching the agent:
-
-```bash
-python spawn.py --operator my_op
-cd ../ako4fib-run-*/
-# Open HINTS.md and add your guidance, e.g.:
-#   "Use Triton for this kernel."
-#   "Start with the PyTorch reference and optimize with CUDA."
-claude
-```
-
-You can also include language guidance directly in your initial prompt to the agent.
 
 Per-language documentation is available in `docs/languages/` within each child environment.
+
+## Benchmark Tuning
+
+Benchmark iteration counts are configured in the `[benchmark]` section of `config.toml` in the child environment:
+
+```toml
+[benchmark]
+baseline_iterations = 20    # reference profiling iterations
+solution_iterations = 100   # solution profiling iterations
+num_trials = 5
+warmup_runs = 3
+```
+
+CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `baseline_iterations` and `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
+
+## Agent Permissions
+
+Each child environment includes `.claude/settings.local.json` which controls what tools the agent can use. By default, broad access is granted (file I/O, bash, web search, etc.). To restrict permissions, edit this file before launching the agent.
+
+For fully automated (unattended) runs, Claude Code supports skipping all permission prompts:
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+> **Warning**: This disables all safety confirmations. Only use in trusted, isolated environments.

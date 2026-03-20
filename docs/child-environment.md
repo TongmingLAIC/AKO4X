@@ -2,21 +2,10 @@
 
 Each call to `spawn.py` creates an isolated child environment with everything the agent needs to optimize a kernel.
 
-## Workflow
-
-1. `python spawn.py --operator <name>` discovers the operator definition and workloads from the dataset
-2. Creates a child environment `ako4fib-run-NNN[-label]/` as a sibling directory
-3. You start your code agent (e.g. `claude`) in the child environment
-4. The agent reads `CLAUDE.md` (task spec) and `HINTS.md` (user guidance), then:
-   - Studies the operator definition and workload distribution
-   - Writes or modifies the kernel in `solution/`
-   - Benchmarks with `scripts/bench.sh` and analyzes per-workload results
-   - Iterates toward higher speedup
-
 ## Structure
 
 ```
-ako4fib-run-NNN/
+ako4fib-run-<label or timestamp>/
 ├── CLAUDE.md                   # Auto-generated task spec (operator details + instructions)
 ├── HINTS.md                    # User-editable hints and constraints
 ├── config.toml                 # Operator configuration (agent updates language/entry_point)
@@ -36,7 +25,7 @@ ako4fib-run-NNN/
 │   ├── run_profile.py          # NCU profiler runner (local only)
 │   └── pack_solution.py        # Pack kernel for evaluation
 ├── baseline.json               # Auto-created, cached reference performance
-├── trajectory/                 # Auto-created, stores each bench run
+├── trajectory/                 # Auto-created, each run saves kernel snapshot + results.json
 └── .claude/
     └── settings.local.json     # Agent permissions
 ```
@@ -48,6 +37,13 @@ The agent updates these fields to match its kernel files:
 - **`language`**: `python`, `triton`, `tilelang`, `cuda`, or `cpp`
 - **`entry_point`**: e.g. `kernel.py::run` or `binding.py::kernel`
 - **`destination_passing_style`**: `false` by default; set `true` when using pre-allocated output buffers
+
+The `[benchmark]` section controls iteration counts:
+
+- **`baseline_iterations`**: Reference profiling iterations (default: `20`, low to avoid CUPTI cache explosion)
+- **`solution_iterations`**: Solution profiling iterations (default: `100`, higher for accuracy)
+- **`num_trials`**: Number of trials per workload (default: `5`)
+- **`warmup_runs`**: Warmup runs before timing (default: `3`)
 
 ## Benchmarking
 
@@ -84,6 +80,15 @@ bash scripts/bench.sh --force-baseline    # Force re-profile reference
 ```
 
 `baseline.json` auto-invalidates when workloads change.
+
+### Trajectory
+
+Each benchmark run automatically saves a snapshot to `trajectory/<timestamp_label>/`, containing:
+
+- All files from `solution/` and `config.toml` at the time of the run
+- `results.json` with per-workload scores, timestamps, and metadata
+
+This allows both users and the agent to review or restore any previous attempt.
 
 ## Profiling (Local Backend)
 
