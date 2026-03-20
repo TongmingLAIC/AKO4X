@@ -3,25 +3,36 @@
 This is the **template repository** for spawning isolated GPU kernel optimization environments.
 It is NOT an optimization environment itself — use `spawn.py` to create one.
 
-## Repository Purpose
+For user-facing documentation (installation, usage, language support, benchmarking, troubleshooting),
+see [README.md](README.md).
 
-Provides scaffolding to create child environments where a Code Agent (e.g. Claude Code)
-autonomously optimizes a GPU kernel, using the flashinfer-bench SDK for evaluation.
-The child environment is **language-agnostic** — the agent decides the kernel language at runtime
-and updates `config.toml` accordingly.
+## Architecture Overview
 
-Supports any flashinfer-bench compatible dataset, including user-defined operators.
+AKO4FIB has three layers:
+
+1. **`spawn.py`** — CLI entry point. Discovers operators from a dataset, resolves configuration
+   (GPU, backend, mode), and orchestrates child environment creation by combining templates,
+   dataset files, and scripts.
+
+2. **Template system** (`templates/`) — `task.md` is the master template with `{{PLACEHOLDER}}`
+   markers. Fragment files (`fragments/`) provide composable blocks (objective, backend instructions,
+   language guide, profiler guide). Per-language docs (`languages/`) and profiler docs (`profiler/`)
+   are copied verbatim into children. The agent config (`agent/claude.json`) controls output
+   filenames and permissions.
+
+3. **Runtime scripts** (`scripts/`) — Copied into each child environment. `bench_utils.py` is the
+   shared core (baseline caching, scoring, trajectory tracking). `run_local.py` / `run_modal.py`
+   are backend-specific runners. `pack_solution.py` bridges `config.toml` to flashinfer-bench's
+   Solution model. `generate_context.py` is used at spawn time only (not copied to children).
 
 ## Directory Structure
 
 ```
 AKO4FIB/
-├── CLAUDE.md                          # This file (developer guide for the template repo)
-├── README.md                          # Human-facing usage guide
 ├── spawn.py                           # Creates isolated child environments
-├── .gitignore                         # Git ignore rules for this template repo
+├── pyproject.toml                     # Package metadata and dependencies
 ├── templates/
-│   ├── task.md                        # Main task template (assembled into CLAUDE.md at spawn)
+│   ├── task.md                        # Main task template (assembled into child's CLAUDE.md)
 │   ├── hints.md                       # Default HINTS.md template (copied to children)
 │   ├── gitignore                      # .gitignore template for child environments
 │   ├── fragments/
@@ -32,16 +43,9 @@ AKO4FIB/
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
-│   │   ├── python.md
-│   │   ├── triton.md
-│   │   ├── tilelang.md
-│   │   ├── cute-dsl.md
-│   │   ├── cuda.md
-│   │   └── cpp.md
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
-│   │   └── ncu.md                     # Detailed NCU profiler reference
 │   └── agent/
-│       └── claude.json                # Claude Code agent config (output filenames + permissions)
+│       └── claude.json                # Agent config (output filenames + permissions)
 └── scripts/
     ├── generate_context.py            # Extracts operator metadata for template rendering
     ├── bench_utils.py                 # Shared benchmark utilities (baseline caching, scoring)
@@ -49,141 +53,69 @@ AKO4FIB/
     ├── bench_modal.sh                 # Modal benchmark script
     ├── profile.sh                     # Local NCU profiler script
     ├── run_profile.py                 # NCU profiler runner (local only)
-    ├── run_local.py                   # Local A100 benchmark runner
-    ├── run_modal.py                   # Modal B200 benchmark runner
+    ├── run_local.py                   # Local benchmark runner
+    ├── run_modal.py                   # Modal benchmark runner
     └── pack_solution.py               # Pack kernel for evaluation
 ```
 
-## Language-Agnostic Design
+## spawn.py Pipeline
 
-Child environments are created without a fixed language. The agent chooses the language at runtime:
+The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 
-- **Scratch mode**: The PyTorch reference is extracted to `solution/kernel.py`. The agent can optimize
-  in-place (Python/Triton) or rewrite in any supported language (CUDA, C++, TileLang, CuTe DSL).
-- **Existing mode**: User-provided kernel files are copied to `solution/`. Language is inferred from
-  file extensions for the initial `config.toml`, but the agent can change it.
-- **config.toml**: Contains `language`, `entry_point`, and `destination_passing_style` fields that the
-  agent updates to match its kernel files before benchmarking.
-- **Language guide**: `templates/fragments/language-guide.md` embeds a quick reference table in the task file;
-  detailed per-language docs live in `templates/languages/` and are copied to `docs/languages/` in child envs.
+- **`populate_child()`** — the main orchestration function. Creates the child directory structure, copies files, generates `config.toml` (inline template, not a separate file), and wires up backend-specific scripts.
+- **`render_template()`** — assembles the task file from `templates/task.md` + fragments. Block placeholders (alone on a line, e.g. `{{OBJECTIVE}}`) replace the entire line; inline placeholders (e.g. `{{OPERATOR}}`) are substituted within lines.
+- **`generate_context()`** (in `scripts/generate_context.py`) — extracts template variables (shapes, workload distribution) from the dataset.
 
-### Supported Languages and Entry Points
+## Template System
 
-| Language | Files in `solution/` | config.toml `language` | config.toml `entry_point` |
-|----------|---------------------|----------------------|--------------------------|
-| Python / PyTorch | `kernel.py` | `python` | `kernel.py::run` |
-| Triton | `kernel.py` | `triton` | `kernel.py::run` |
-| TileLang | `kernel.py` | `tilelang` | `kernel.py::run` |
-| CuTe DSL | `kernel.py` | `python` | `kernel.py::run` |
-| CUDA | `kernel.cu` + `binding.py` | `cuda` | `binding.py::kernel` |
-| C++ | `kernel.cpp` + `binding.py` | `cpp` | `binding.py::kernel` |
+`templates/task.md` is the skeleton with `{{PLACEHOLDER}}` markers. See `render_template()` in `spawn.py` for the full list of block vs inline placeholders. Fragments in `templates/fragments/` provide the substitution content; `templates/languages/` and `templates/profiler/` are copied verbatim into children.
 
-For compiled languages (CUDA, C++), `binding.py` uses TVM FFI (`from tvm.ffi import register_func`)
-to expose compiled code to Python. Alternatively, use `kernel.cu::symbol_name` with
-`TVM_FFI_DLL_EXPORT_TYPED_FUNC` to export the function directly.
+### How to Modify Templates
 
-### Additional Package Requirements
+| What to change | Where to edit |
+|----------------|---------------|
+| Task template (main skeleton) | `templates/task.md` |
+| Objective text | `templates/fragments/objective-scratch.md` or `objective-existing.md` |
+| Language quick-reference | `templates/fragments/language-guide.md` |
+| Language detail docs | `templates/languages/*.md` |
+| Profiler inline summary | `templates/fragments/profiler-guide.md` (local only) |
+| Profiler detail docs | `templates/profiler/ncu.md` |
+| Backend instructions | `templates/fragments/backend-local.md` or `backend-modal.md` |
+| Agent config | `templates/agent/claude.json` |
+| Hints template | `templates/hints.md` |
+| config.toml defaults | `populate_child()` in `spawn.py` (inline string) |
+| Benchmark scripts | `scripts/bench.sh`, `scripts/bench_modal.sh`, etc. |
 
-Some languages require extra packages to be installed in the Python environment:
+## Agent Config System
 
-- **tilelang**: Requires `pip install tilelang`. Without it, `TileLangBuilder` is not registered and all workloads report COMPILE_ERROR.
-- **CuTe DSL** (NVIDIA CUTLASS Python DSL): Requires `pip install nvidia-cutlass-dsl`. CuTe DSL kernels are defined in Python via `@CuTeDSL.kernel` / `@CuTeDSL.jit` decorators and compiled at runtime to PTX. Torch tensors are passed to CuTe DSL via `cutlass.cute.runtime.from_dlpack()`.
-- **triton**: Pre-installed with PyTorch, no extra installation needed.
+Each agent type has a JSON config in `templates/agent/` (currently only `claude.json`). Fields: `task_filename`, `hints_filename`, `permissions`. The `permissions` field drives `.claude/settings.local.json` generation in child environments. Use `--agent <name>` at spawn time to select a config.
 
-## How spawn.py Works
+## Extending the System
 
-1. Parses `--operator`, `--mode`, `--backend`, `--gpu`, `--agent`, `--kernel`, `--name`, `--dataset`, `--task`, `--hints`
-2. If `--operator` not provided, lists available operators from the dataset and exits
-3. Resolves GPU (auto-detect for local, required for modal)
-4. Reads agent config from `templates/agent/{agent}.json`:
-   - `task_filename`: Name of the generated task file (e.g., "CLAUDE.md")
-   - `hints_filename`: Name of the hints file (e.g., "HINTS.md")
-   - `permissions`: Claude Code permissions (Bash, Edit, Read, Write, etc.)
-5. Auto-discovers operator definition from `<dataset>/definitions/*/<operator>.json`
-6. Calls `generate_context()` to extract template variables (shapes, workload summary, etc.)
-7. Creates `ako4fib-run-{label}/` (with `--name`) or `ako4fib-run-{YYYYMMDD_HHMMSS}/`
-8. Copies definition.json and workloads.jsonl from the dataset
-9. Auto-generates `config.toml` with operator name, GPU, and agent-editable fields (language, entry_point, dps) at the bottom
-10. Copies backend-specific bench script and runner (`run_local.py` or `run_modal.py`)
-11. Generates `.claude/settings.local.json` from agent config permissions
-12. **Populates `solution/` directory**:
-    - **Scratch mode**: Extracts reference from definition.json → `solution/kernel.py`
-    - **Existing mode**: Copies user kernel file(s) to `solution/`; if colocated `config.toml` exists, uses it; otherwise infers language from file extension
-13. Copies hints file (from `--hints` or `templates/hints.md`) as `HINTS.md`
-14. Assembles task file from `task.md` + fragments (including language-guide.md) → output filename from agent config
-15. Initializes a git repo in the child directory
+### Adding a New Backend
 
-## Template Placeholders
+1. Create `templates/fragments/backend-{name}.md` with execution instructions
+2. Create `scripts/run_{name}.py` implementing the benchmark runner
+3. Create `scripts/bench_{name}.sh` wrapper script
+4. Update `spawn.py`: add to `--backend` choices in `parse_args()`, add copy logic in `populate_child()`
 
-Templates use these placeholders (replaced at spawn time):
+### Adding a New Language
 
-| Placeholder | Source | Example |
-|-------------|--------|---------|
-| `{{GPU_NAME}}` | `uppercase(--gpu)` | `A100`, `H100` |
-| `{{BACKEND}}` | `fragments/backend-{backend}.md` content | (execution instructions) |
-| `{{OBJECTIVE}}` | `fragments/objective-{mode}.md` content | (multi-line) |
-| `{{LANGUAGE_GUIDE}}` | `fragments/language-guide.md` content | (comprehensive language reference) |
-| `{{PROFILER_GUIDE}}` | `fragments/profiler-guide.md` content (local only, empty for modal) | (NCU profiler summary) |
-| `{{OPERATOR}}` | definition name | `dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64` |
-| `{{OPERATOR_DESCRIPTION}}` | first sentence of definition description | `Batched Native Sparse Attention (DSA)...` |
-| `{{NUM_WORKLOADS}}` | count of workloads | `23` |
-| `{{SHAPE_SUMMARY}}` | auto-formatted input/output shapes | `Key shapes: ...` |
-| `{{WORKLOAD_SUMMARY}}` | distribution of variable axes | `Workloads: num_tokens in {1(x1),...}` |
+1. Create `templates/languages/{name}.md` with language-specific patterns and constraints
+2. Update `templates/fragments/language-guide.md` — add a row to the quick reference table
+3. Update `infer_language()` in `spawn.py` if the file extension is new
+4. Update the language table in `README.md`
+5. No changes needed in bench scripts — flashinfer-bench handles compilation via its builder system
 
-## How to Modify Templates
+### Adding a New Agent Type
 
-- **Task template**: Edit `templates/task.md` — the main template assembled into the child's task file
-- **Objective fragments**: Edit `templates/fragments/objective-scratch.md` or `objective-existing.md`
-- **Language guide**: Edit `templates/fragments/language-guide.md` — inline quick reference table embedded in task file
-- **Language detail docs**: Edit files in `templates/languages/` — per-language patterns copied to child `docs/languages/`
-- **Profiler guide**: Edit `templates/fragments/profiler-guide.md` — inline profiler summary embedded in task file (local only)
-- **Profiler detail docs**: Edit `templates/profiler/ncu.md` — detailed NCU reference copied to child `docs/profiler/`
-- **Backend execution instructions**: Edit `templates/fragments/backend-local.md` or `backend-modal.md`
-- **Agent config**: Edit `templates/agent/claude.json` (output filenames + permissions)
-- **Hints template**: Edit `templates/hints.md`
-- **Config defaults**: Edit the `config.toml` generation in `spawn.py` (`populate_child` function)
-- **Benchmark scripts**: Edit `scripts/bench.sh`, `scripts/bench_modal.sh`, etc.
+1. Create `templates/agent/{name}.json` with `task_filename`, `hints_filename`, and `permissions`
+2. Use `--agent {name}` at spawn time
 
-## Baseline Caching
+## Key Development Constraints
 
-The benchmark system caches reference implementation performance on the first run:
-- First `bench.sh` run profiles the reference (20 iterations) and saves metrics to `baseline.json`
-- Subsequent runs skip reference profiling and use cached values with 100 iterations for the solution
-- This provides stable reference metrics and more accurate solution timing
-- Use `--force-baseline` to re-profile: `bash scripts/bench.sh --force-baseline`
-- `baseline.json` auto-invalidates when workloads change
-
-## Key Constraints
-
-- Agents only edit files in `solution/` (and `config.toml`)
-- `config.toml`: `destination_passing_style = false` by default; agent updates `language` and `entry_point` to match kernel files
-- Operator data (definition.json, workloads.jsonl, reference kernel) comes from the dataset at spawn time, not from static files in this repo
-- Benchmark scripts require an activated Python environment with all dependencies installed
-- Local benchmarking uses CUPTI profiling via `cupti-python` (**requires both `cupti-python >= 13.0.0` and CUDA 13.0+ driver**). If `cupti-python` is not installed or its version is < 13.0, the benchmark gracefully falls back to CUDA events. However, when `cupti-python >= 13.0` is installed but the **CUDA driver** is < 13.0, CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. An upstream fix in flashinfer to catch this runtime failure is pending; until merged, ensure the CUDA driver is >= 13.0 when `cupti-python >= 13.0` is installed (or use Modal backend). CUPTI is strongly recommended for measurement accuracy — CUDA events fallback with low iteration counts (e.g. baseline's 20 iterations) can produce noisy results
-- **flashinfer-bench** is installed from source (git main branch) via `pyproject.toml`. The PyPI release (v0.1.2) lags behind and may lack recent fixes. `cupti-python>=13.0.0` is also declared in `pyproject.toml` for CUPTI profiling support
-
-## TVM FFI Builder Limitations
-
-The TVMFFIBuilder (used for CUDA/C++ solutions) compiles `.cu`/`.cpp` files via `tvm_ffi.cpp.build()` but has a known limitation:
-
-- **No external library linking**: The builder does not pass `extra_ldflags` to the linker. Libraries like cuBLAS, cuDNN, etc. cannot be linked at compile time. The `BuildSpec.dependencies` field exists in the flashinfer-bench data model (with comments mentioning cuBLAS/cuDNN/CUTLASS support) but is not read by TVMFFIBuilder.
-- **Workaround**: Use `dlopen`/`dlsym` to load CUDA libraries at runtime from within the `.cu` file. For example, `cublasGemmEx` can be called via `dlopen("libcublas.so.12", RTLD_NOW)` + `dlsym`. Note: prefer `cublasGemmEx` (accepts `float*` alpha/beta) over `cublasHgemm` (accepts `__half*` alpha/beta) — the `__half` type may have ABI issues across shared library boundaries via dlopen.
-- **Entry point for compiled languages**: The default entry point is `binding.py::kernel`, which uses Python bindings via TVM FFI. Alternatively, you can use `kernel.cu::symbol_name` to have the TVMFFIBuilder compile `.cu` files and look up the exported symbol directly via `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)`. When using this approach, the `binding.py` stub is packed but not used by the builder.
-
-## ⚠️ Custom Dataset Requirements
-
-**CRITICAL**: If you create a custom dataset, the `definition.json` **must** contain a `reference` field with **plain PyTorch code**:
-
-```json
-{
-  "name": "my_operator",
-  "reference": "import torch\n\n@torch.no_grad()\ndef run(...):\n    # Plain PyTorch implementation\n    return ...",
-  ...
-}
-```
-
-The `reference` is the mathematical specification — flashinfer-bench executes it as Python (`language=PYTHON`, `entry_point=main.py::run`) for:
-- Generating reference outputs (correctness baseline)
-- Profiling reference latency (performance baseline)
-
-**Do NOT use CUDA/C++/Triton code in `reference`** — the framework will fail. Those languages belong in the `Solution` being optimized, not the `Definition.reference`.
+- **Scripts must be self-contained**: Everything in `scripts/` is copied into child environments. No imports from the parent repo — children are standalone.
+- **Operator data is external**: `definition.json`, `workloads.jsonl`, and reference kernels come from the dataset at spawn time. This repo never stores operator-specific data.
+- **config.toml is generated inline**: The template is a string literal in `populate_child()`, not a separate template file.
+- **bench_utils.py is shared**: Used by both `run_local.py` and `run_modal.py`, and also copied into the Modal image. Keep it self-contained with no heavy dependencies beyond what's already required.
+- **Child environments are disposable**: This repo is the source of truth. Any fix to scripts or templates must be made here, then new children spawned to pick up changes.

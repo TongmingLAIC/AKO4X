@@ -49,8 +49,6 @@ def parse_args():
     parser.add_argument("--kernel", default="")
     parser.add_argument("--name", default="", dest="label")
     parser.add_argument("--dataset", default="")
-    parser.add_argument("--task", "--prompt", default="", dest="task")
-    parser.add_argument("--hints", "--info", default="", dest="hints")
     return parser.parse_args()
 
 
@@ -357,11 +355,11 @@ def main():
     dataset_path = resolve_dataset(args.dataset)
 
     # Resolve task and hints template paths
-    task_path = Path(args.task) if args.task else PARENT_DIR / "templates" / "task.md"
+    task_path = PARENT_DIR / "templates" / "task.md"
     if not task_path.is_file():
         sys.exit(f"Error: Task template not found: {task_path}")
 
-    hints_path = Path(args.hints) if args.hints else PARENT_DIR / "templates" / "hints.md"
+    hints_path = PARENT_DIR / "templates" / "hints.md"
     if not hints_path.is_file():
         sys.exit(f"Error: Hints file not found: {hints_path}")
 

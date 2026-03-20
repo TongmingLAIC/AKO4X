@@ -9,6 +9,9 @@ ako4fib-run-*/
 # Python packaging
 *.egg-info/
 
+# Virtual environments
+venv/
+
 # OS / editor
 .DS_Store
 Thumbs.db
