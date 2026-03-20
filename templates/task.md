@@ -38,6 +38,8 @@ This is the only command needed to benchmark — it compiles, checks correctness
 
 {{BACKEND}}
 
+{{PROFILER_GUIDE}}
+
 {{LANGUAGE_GUIDE}}
 
 ## Configuration

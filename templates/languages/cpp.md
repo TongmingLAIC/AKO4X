@@ -8,7 +8,7 @@ Two files: `solution/kernel.cpp` (kernel code) and `solution/binding.py` (Python
 import torch
 from tvm.ffi import register_func
 
-@register_func("flashinfer.kernel")
+@register_func("kernel")
 def kernel(input, weight):
     output = torch.empty_like(input)
     # Call C++ compiled code

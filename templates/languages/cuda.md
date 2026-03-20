@@ -1,20 +1,7 @@
 # CUDA
 
-Two files: `solution/kernel.cu` (kernel code) and `solution/binding.py` (Python bindings via TVM FFI).
-
-## binding.py
-
-```python
-import torch
-from tvm.ffi import register_func
-
-@register_func("flashinfer.kernel")
-def kernel(input, weight):
-    # Allocate output
-    output = torch.empty_like(input)
-    # Launch CUDA kernel (via ctypes or torch custom ops)
-    return output
-```
+Two entry point patterns — direct symbol export (recommended) or Python binding.
+The TVM FFI builder compiles `.cu` files automatically in both cases.
 
 ## kernel.cu
 
@@ -30,23 +17,50 @@ __global__ void my_kernel(const half* input, half* output, int n) {
 }
 ```
 
-The TVM FFI builder compiles `.cu` files automatically.
+## Recommended: Direct Symbol Export
 
-## Alternative: Direct Symbol Export
-
-Instead of `binding.py`, you can export the function directly from `.cu` using `TVM_FFI_DLL_EXPORT_TYPED_FUNC`:
+Export the function directly from `.cu` using `TVM_FFI_DLL_EXPORT_TYPED_FUNC`.
+The wrapper function receives `tvm::ffi::TensorView` args (use `.data_ptr()`, `.size(dim)` to access data).
+Requires `destination_passing_style = true` — outputs are passed as trailing arguments.
 
 ```cuda
-#include <tvm/runtime/c_runtime_api.h>
+#include <tvm/ffi/container/tensor.h>
 
-void my_kernel_impl(DLTensor* input, DLTensor* output) {
-    // Launch kernel using input->data, output->data
+__global__ void my_cuda_kernel(const half* in, half* out, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) out[idx] = in[idx];
 }
 
-TVM_FFI_DLL_EXPORT_TYPED_FUNC(my_kernel, my_kernel_impl);
+void my_kernel(tvm::ffi::TensorView input, tvm::ffi::TensorView output) {
+    int n = input.size(0);
+    my_cuda_kernel<<<(n+255)/256, 256>>>(
+        static_cast<const half*>(input.data_ptr()),
+        static_cast<half*>(output.data_ptr()), n);
+    cudaDeviceSynchronize();
+}
+
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(my_kernel, my_kernel);
 ```
 
-Then set entry_point to `kernel.cu::my_kernel` in config.toml. The `binding.py` stub is packed but not used.
+Then set `entry_point = "kernel.cu::my_kernel"` and `destination_passing_style = true` in config.toml.
+
+## Alternative: Python Binding
+
+Use `binding.py` when you need full Python control (e.g., calling cuBLAS via dlopen, or torch custom ops).
+You handle kernel launching yourself; the compiled `.cu` is loaded but not directly wired to the binding.
+
+```python
+import torch
+from tvm.ffi import register_func
+
+@register_func("kernel")
+def kernel(A, B):
+    output = torch.empty(A.shape[0], B.shape[0], device=A.device, dtype=A.dtype)
+    # Launch via ctypes, dlopen, torch custom ops, etc.
+    return output
+```
+
+Set `entry_point = "binding.py::kernel"` and `destination_passing_style = false` in config.toml.
 
 ## TVM FFI Builder Limitations
 
@@ -65,4 +79,5 @@ auto cublasGemmEx_fn = (decltype(&cublasGemmEx))dlsym(cublas_handle, "cublasGemm
 ## Config
 
 - `config.toml` language: `cuda`
-- `config.toml` entry_point: `binding.py::kernel` (default) or `kernel.cu::symbol_name` (direct export)
+- Direct export: `entry_point = "kernel.cu::symbol_name"`, `destination_passing_style = true`
+- Python binding: `entry_point = "binding.py::kernel"`, `destination_passing_style = false`

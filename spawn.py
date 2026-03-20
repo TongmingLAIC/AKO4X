@@ -196,7 +196,7 @@ def render_template(task_text, placeholders):
     block_keys = {
         "{{OBJECTIVE}}", "{{BACKEND}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
-        "{{LANGUAGE_GUIDE}}",
+        "{{LANGUAGE_GUIDE}}", "{{PROFILER_GUIDE}}",
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
@@ -313,6 +313,9 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     if backend == "local":
         shutil.copy2(PARENT_DIR / "scripts" / "bench.sh", child_dir / "scripts" / "bench.sh")
         shutil.copy2(PARENT_DIR / "scripts" / "run_local.py", child_dir / "scripts" / "run_local.py")
+        shutil.copy2(PARENT_DIR / "scripts" / "profile.sh", child_dir / "scripts" / "profile.sh")
+        shutil.copy2(PARENT_DIR / "scripts" / "run_profile.py", child_dir / "scripts" / "run_profile.py")
+        shutil.copytree(PARENT_DIR / "templates" / "profiler", child_dir / "docs" / "profiler")
     else:
         shutil.copy2(PARENT_DIR / "scripts" / "bench_modal.sh", child_dir / "scripts" / "bench.sh")
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
@@ -387,6 +390,7 @@ def main():
     backend_content = read_fragment(fragments_dir / f"backend-{args.backend}.md")
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
     language_guide = read_fragment(fragments_dir / "language-guide.md")
+    profiler_guide = read_fragment(fragments_dir / "profiler-guide.md") if args.backend == "local" else ""
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
@@ -402,6 +406,7 @@ def main():
     placeholders = {
         "{{OBJECTIVE}}": objective,
         "{{BACKEND}}": backend_content,
+        "{{PROFILER_GUIDE}}": profiler_guide,
         "{{LANGUAGE_GUIDE}}": language_guide,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],

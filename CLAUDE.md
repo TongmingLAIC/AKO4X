@@ -28,6 +28,7 @@ AKO4FIB/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
 │   │   ├── language-guide.md          # Inline language reference (table + pointer)
+│   │   ├── profiler-guide.md          # Inline profiler summary (local backend only)
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
@@ -37,6 +38,8 @@ AKO4FIB/
 │   │   ├── cute-dsl.md
 │   │   ├── cuda.md
 │   │   └── cpp.md
+│   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
+│   │   └── ncu.md                     # Detailed NCU profiler reference
 │   └── agent/
 │       └── claude.json                # Claude Code agent config (output filenames + permissions)
 └── scripts/
@@ -44,6 +47,8 @@ AKO4FIB/
     ├── bench_utils.py                 # Shared benchmark utilities (baseline caching, scoring)
     ├── bench.sh                       # Local benchmark script
     ├── bench_modal.sh                 # Modal benchmark script
+    ├── profile.sh                     # Local NCU profiler script
+    ├── run_profile.py                 # NCU profiler runner (local only)
     ├── run_local.py                   # Local A100 benchmark runner
     ├── run_modal.py                   # Modal B200 benchmark runner
     └── pack_solution.py               # Pack kernel for evaluation
@@ -118,6 +123,7 @@ Templates use these placeholders (replaced at spawn time):
 | `{{BACKEND}}` | `fragments/backend-{backend}.md` content | (execution instructions) |
 | `{{OBJECTIVE}}` | `fragments/objective-{mode}.md` content | (multi-line) |
 | `{{LANGUAGE_GUIDE}}` | `fragments/language-guide.md` content | (comprehensive language reference) |
+| `{{PROFILER_GUIDE}}` | `fragments/profiler-guide.md` content (local only, empty for modal) | (NCU profiler summary) |
 | `{{OPERATOR}}` | definition name | `dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64` |
 | `{{OPERATOR_DESCRIPTION}}` | first sentence of definition description | `Batched Native Sparse Attention (DSA)...` |
 | `{{NUM_WORKLOADS}}` | count of workloads | `23` |
@@ -130,6 +136,8 @@ Templates use these placeholders (replaced at spawn time):
 - **Objective fragments**: Edit `templates/fragments/objective-scratch.md` or `objective-existing.md`
 - **Language guide**: Edit `templates/fragments/language-guide.md` — inline quick reference table embedded in task file
 - **Language detail docs**: Edit files in `templates/languages/` — per-language patterns copied to child `docs/languages/`
+- **Profiler guide**: Edit `templates/fragments/profiler-guide.md` — inline profiler summary embedded in task file (local only)
+- **Profiler detail docs**: Edit `templates/profiler/ncu.md` — detailed NCU reference copied to child `docs/profiler/`
 - **Backend execution instructions**: Edit `templates/fragments/backend-local.md` or `backend-modal.md`
 - **Agent config**: Edit `templates/agent/claude.json` (output filenames + permissions)
 - **Hints template**: Edit `templates/hints.md`
