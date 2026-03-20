@@ -82,7 +82,7 @@ echo "Write the kernel in CUDA." > my_hints.md
 python setup.py --operator my_op --hints my_hints.md
 ```
 
-The agent can write kernels in Python/PyTorch, Triton, TileLang, CuTe DSL, CUDA, or C++. See the Language Guide section in the generated `CLAUDE.md` for details on each language.
+The agent can write kernels in Python/PyTorch, Triton, TileLang, CuTe DSL, CUDA, or C++. See the Language Reference section in the generated `CLAUDE.md` for details on each language.
 
 ### Existing Mode
 

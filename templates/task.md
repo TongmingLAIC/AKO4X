@@ -20,12 +20,13 @@ Workloads: `docs/workloads.jsonl` ({{NUM_WORKLOADS}} total).
 
 ## Benchmark
 
-- GPU: {{GPU_NAME}}
-{{BACKEND}}
+GPU: {{GPU_NAME}}
 
 ```bash
 bash scripts/bench.sh
 ```
+
+This is the only command needed to benchmark — it compiles, checks correctness, and profiles automatically.
 
 - **PASSED** = correct output within tolerance. **FAILED** = incorrect or crash.
 - **speedup_factor** = reference_latency / your_latency. Higher is better.
@@ -34,6 +35,8 @@ bash scripts/bench.sh
 - Label runs for tracking: `bash scripts/bench.sh "description"` saves to `trajectory/YYYYMMDD_HHMMSS_description/`.
 
 **Score = mean speedup across all {{NUM_WORKLOADS}} workloads.** All must PASS for a valid score.
+
+{{BACKEND}}
 
 {{LANGUAGE_GUIDE}}
 
@@ -48,11 +51,10 @@ bash scripts/bench.sh
 ## Workflow
 
 1. `git log --oneline` to review optimization history (if resuming)
-2. Run `bash scripts/bench.sh "baseline"` to establish baseline
-3. Study the operator spec in `docs/definition.json`
-4. Modify kernel → bench → if all PASS, commit → analyze → iterate
-5. Roll back on regression; check per-group breakdown to target weak workloads
-6. Stop when no further improvements found; summarize results
+2. Study the operator spec in `docs/definition.json`
+3. Modify kernel → bench → if all PASS, commit → analyze → iterate
+4. Roll back on regression; check per-group breakdown to target weak workloads
+5. Stop when no further improvements found; summarize results
 
 **Commit after each successful benchmark.** When all workloads PASS, commit with this format:
 

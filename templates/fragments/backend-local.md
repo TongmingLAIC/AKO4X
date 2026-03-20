@@ -1,2 +1,1 @@
-- Conda env: `fi-bench` (Python 3.12, PyTorch 2.9.1+cu128)
-- Run Python with: `conda run -n fi-bench --no-capture-output python ...`
+Runs locally in `fi-bench` conda env. Manual Python: `conda run -n fi-bench --no-capture-output python ...`
