@@ -1,5 +1,4 @@
-Write a kernel in `solution/` that maximizes speedup on {{GPU_NAME}}.
-This is a **{{OPERATOR_DESCRIPTION}}**.
+Write a kernel that maximizes speedup over the reference on {{GPU_NAME}}.
+This operator performs **{{OPERATOR_DESCRIPTION}}**.
 
-**Starting point:** The reference implementation (Python/PyTorch) is in `solution/kernel.py`.
-You can optimize it in-place or rewrite in any supported language (see Language Guide below).
+The reference implementation (Python/PyTorch) is provided in `solution/kernel.py` as your starting point.
