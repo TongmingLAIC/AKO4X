@@ -13,7 +13,7 @@ Don't profile routinely — profile when benchmark results alone don't explain p
 2. **A workload group is disproportionately slow.** The per-group breakdown from `bench.sh` shows one group lagging behind others. Profile a representative workload from that group to understand what makes it different.
 3. **You need to choose between optimization strategies.** You suspect a kernel is memory-bound but aren't sure. Profiling confirms the bottleneck category so you invest effort in the right direction.
 4. **After a major architectural change.** New tiling scheme, different algorithm, or language switch — profile to understand the new performance characteristics before micro-optimizing.
-5. **Unexpected regression.** A change that should have improved performance made it worse. Profile before and after (see Workflow 4 below) to find what regressed.
+5. **Unexpected regression.** A change that should have improved performance made it worse. Profile before and after to find what regressed.
 
 **Skip profiling when:**
 
@@ -82,70 +82,9 @@ bash scripts/profile.sh <index> --max-lines 200
 - **source**: Maps performance counters to source code lines. Use to find which lines cause stalls or low throughput.
 - **raw**: Machine-readable output. Use when you need to parse specific metric values programmatically.
 
-### Key Metrics to Look For
-
-**Memory vs Compute bound:**
-- `sm__throughput.avg.pct_of_peak_sustained_elapsed` — SM (compute) utilization
-- `dram__throughput.avg.pct_of_peak_sustained_elapsed` — DRAM (memory) utilization
-- If memory throughput >> compute throughput → memory-bound (optimize data movement)
-- If compute throughput >> memory throughput → compute-bound (optimize arithmetic)
-
-**Occupancy:**
-- `sm__warps_active.avg.pct_of_peak_sustained_elapsed` — achieved occupancy
-- Low occupancy often means register pressure or shared memory limits active warps
-- Check `launch__registers_per_thread` and `launch__shared_mem_per_block_dynamic`
-
-**Warp stalls (where time is lost):**
-- `smsp__warps_issue_stalled_*` — breakdown of stall reasons
-- `stalled_long_scoreboard` → waiting for global memory loads
-- `stalled_math_pipe_throttle` → compute pipe full (compute-bound)
-- `stalled_barrier` → syncthreads overhead
-- `stalled_not_selected` → insufficient warps to hide latency
-
-**Launch configuration:**
-- `launch__grid_size`, `launch__block_size` — verify your launch config
-- `launch__waves_per_multiprocessor` — waves < 1 means underutilization
-
-## Profiling Workflows
-
-### 1. Identify Memory-Bound Kernels
-
-```bash
-bash scripts/profile.sh <index> --set detailed
-```
-Look at "Memory Workload Analysis" section. If DRAM throughput is near peak but compute is low, focus on:
-- Reducing global memory accesses (tiling, shared memory caching)
-- Improving memory access patterns (coalescing)
-- Using vectorized loads (float4, int4)
-
-### 2. Check Occupancy
-
-```bash
-bash scripts/profile.sh <index> --set detailed
-```
-Look at "Occupancy" section. If achieved occupancy is significantly below theoretical:
-- Reduce registers per thread (`__launch_bounds__`, compiler flags)
-- Reduce shared memory per block
-- Adjust block size
-
-### 3. Source-Level Analysis
-
-```bash
-bash scripts/profile.sh <index> --page source
-```
-Maps stall cycles to specific source lines. Useful for finding the exact code causing bottlenecks.
-
-### 4. Compare Before/After
-
-Profile the same workload before and after an optimization. Focus on:
-- Did the target metric improve?
-- Did any metric regress unexpectedly?
-
 ## Tips
 
-- **Choose representative workloads**: Profile workloads with the worst speedup from `bench.sh`, not the fastest ones.
-- **Start with `--set detailed`**: The default covers most use cases. Only use `full` when detailed doesn't explain the issue.
 - **Use `--kernel-name`**: When your solution launches multiple kernels, filter to the one of interest. The name usually matches your function/kernel name.
 - **NCU adds overhead**: Profiled execution is much slower than normal. This is expected — NCU replays kernels to collect metrics.
-- **One workload at a time**: NCU profiles a single workload in detail, unlike `bench.sh` which runs all workloads. Pick the most informative one.
+- **One workload at a time**: Pick the most informative workload (usually the slowest from `bench.sh`).
 - **`--page raw` for scripting**: When you need to extract a specific metric value, use raw output and parse the result.
