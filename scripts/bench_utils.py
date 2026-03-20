@@ -337,7 +337,10 @@ def compute_score(results: dict) -> dict:
 
     if all_valid and all_speedups:
         final_score = sum(all_speedups) / len(all_speedups)
-        group_scores = {g: sum(sfs) / len(sfs) for g, sfs in sorted(by_group.items())}
+        if group_axis:
+            group_scores = {g: sum(sfs) / len(sfs) for g, sfs in sorted(by_group.items())}
+        else:
+            group_scores = {}
     else:
         final_score = None
         group_scores = {}
@@ -386,9 +389,10 @@ def print_results(results: dict, score: dict = None):
         if score["final_score"] is not None:
             print(f"  FINAL SCORE (mean speedup): {score['final_score']:.2f}x")
             print(f"  Passed: {score['passed']}/{score['total']} | Min: {score['min_speedup']:.2f}x | Max: {score['max_speedup']:.2f}x")
-            group_axis = score.get("group_axis", "group")
-            group_str = "  ".join(f"{g}\u2192{avg:.2f}x" for g, avg in score["group_scores"].items())
-            print(f"  By {group_axis}:  {group_str}")
+            if score.get("group_scores"):
+                group_axis = score.get("group_axis", "group")
+                group_str = "  ".join(f"{g}\u2192{avg:.2f}x" for g, avg in score["group_scores"].items())
+                print(f"  By {group_axis}:  {group_str}")
         else:
             parts = []
             if score["failed"]:

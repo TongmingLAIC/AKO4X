@@ -84,26 +84,7 @@ def generate_workload_summary(workloads: list, axes: dict) -> str:
         dist = ",".join(f"{v}(x{c})" for v, c in sorted_vals)
         parts.append(f"{axis_name} in {{{dist}}}")
 
-    # Also include constant axis values from workloads
-    const_parts = []
-    # Check for axes that are var but constant across workloads
-    first_workload_axes = workloads[0].get("workload", {}).get("axes", {})
-    for axis_name in first_workload_axes:
-        if axis_name in var_axes:
-            continue
-        # This is a workload axis that's not in var_axes list - include its value
-        val = first_workload_axes[axis_name]
-        all_same = all(
-            w.get("workload", {}).get("axes", {}).get(axis_name) == val
-            for w in workloads
-        )
-        if all_same:
-            const_parts.append(f"{axis_name}={val}")
-
-    summary = "Workloads: " + ", ".join(parts)
-    if const_parts:
-        summary += ", " + ", ".join(const_parts)
-    summary += "."
+    summary = "Workloads: " + ", ".join(parts) + "."
     return summary
 
 

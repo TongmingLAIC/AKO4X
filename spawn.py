@@ -109,14 +109,19 @@ def resolve_dataset(dataset_arg):
 
 
 def list_operators(dataset_path):
-    """Print available operators and exit."""
+    """Print available operators (only those with workload files) and exit."""
     print("Available operators:")
     print()
+    count = 0
     for def_file in sorted(dataset_path.glob("definitions/*/*.json")):
         op_name = def_file.stem
         op_type = def_file.parent.name
-        print(f"  {op_name}  ({op_type})")
+        workloads_file = dataset_path / "workloads" / op_type / f"{op_name}.jsonl"
+        if workloads_file.is_file():
+            print(f"  {op_name}  ({op_type})")
+            count += 1
     print()
+    print(f"{count} operators available.")
     print(USAGE_LINE)
     sys.exit(0)
 
