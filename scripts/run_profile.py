@@ -6,7 +6,6 @@ Reuses pack_solution() to build Solution objects and the flashinfer-bench NCU ag
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -16,29 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from flashinfer_bench import Solution, TraceSet
 from flashinfer_bench.agents import flashinfer_bench_list_ncu_options, flashinfer_bench_run_ncu
+from scripts.bench_utils import get_trace_set_path
 from scripts.pack_solution import pack_solution
-
-
-def get_trace_set_path() -> str:
-    """Get trace set path from config.toml or environment variable."""
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
-    config_path = PROJECT_ROOT / "config.toml"
-    if config_path.exists():
-        with open(config_path, "rb") as f:
-            config = tomllib.load(f)
-        path = config.get("build", {}).get("dataset_path")
-        if path:
-            return path
-    path = os.environ.get("FIB_DATASET_PATH")
-    if not path:
-        raise EnvironmentError(
-            "Dataset path not found. Either set 'dataset_path' in config.toml "
-            "or the FIB_DATASET_PATH environment variable."
-        )
-    return path
 
 
 def load_workloads():

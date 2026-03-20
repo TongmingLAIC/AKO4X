@@ -67,34 +67,15 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
     if config is None:
         config = BenchmarkConfig(warmup_runs=3, iterations=100, num_trials=5)
 
-    trace_set = TraceSet.from_path(TRACE_SET_PATH)
-
-    if solution.definition not in trace_set.definitions:
-        raise ValueError(f"Definition '{solution.definition}' not found in trace set")
-
-    definition = trace_set.definitions[solution.definition]
-    workloads = trace_set.workloads.get(solution.definition, [])
-
-    if not workloads:
-        raise ValueError(f"No workloads found for definition '{solution.definition}'")
-
-    bench_trace_set = TraceSet(
-        root=trace_set.root,
-        definitions={definition.name: definition},
-        solutions={definition.name: [solution]},
-        workloads={definition.name: workloads},
-        traces={definition.name: []},
-    )
-
-    benchmark = _Benchmark(bench_trace_set, config)
-    result_trace_set = benchmark.run_all(dump_traces=True)
-
     # Import bench_utils from the file copied into the image
     import sys as _sys
     _sys.path.insert(0, "/root")
-    from bench_utils import extract_results
+    from bench_utils import build_bench_trace_set, extract_results
 
-    return extract_results(result_trace_set, definition.name)
+    bench_trace_set = build_bench_trace_set(TRACE_SET_PATH, solution)
+    benchmark = _Benchmark(bench_trace_set, config)
+    result_trace_set = benchmark.run_all(dump_traces=True)
+    return extract_results(result_trace_set, solution.definition)
 
 
 @app.local_entrypoint()

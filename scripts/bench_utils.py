@@ -7,6 +7,7 @@ and the two-phase benchmark orchestration used by both run_local.py and run_moda
 
 import json
 import math
+import os
 import shutil
 import sys
 import tempfile
@@ -14,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from flashinfer_bench import BenchmarkConfig, BuildSpec, Solution
+from flashinfer_bench import BenchmarkConfig, BuildSpec, Solution, TraceSet
 from flashinfer_bench.agents import pack_solution_from_files
 
 try:
@@ -25,6 +26,8 @@ except ImportError:
 # --- Project paths ---
 PROJECT_ROOT = Path(__file__).parent.parent
 BASELINE_PATH = PROJECT_ROOT / "baseline.json"
+DEFINITION_PATH = PROJECT_ROOT / "docs" / "definition.json"
+WORKLOADS_PATH = PROJECT_ROOT / "docs" / "workloads.jsonl"
 
 
 def get_language() -> str:
@@ -58,21 +61,64 @@ WARMUP_RUNS = _bench_cfg["warmup_runs"]
 
 
 # ---------------------------------------------------------------------------
+# Trace set loading
+# ---------------------------------------------------------------------------
+
+def get_trace_set_path() -> str:
+    """Get trace set path from config.toml or FIB_DATASET_PATH env var."""
+    config_path = PROJECT_ROOT / "config.toml"
+    if config_path.exists():
+        with open(config_path, "rb") as f:
+            config = tomllib.load(f)
+        path = config.get("build", {}).get("dataset_path")
+        if path:
+            return path
+    path = os.environ.get("FIB_DATASET_PATH")
+    if not path:
+        raise EnvironmentError(
+            "Dataset path not found. Either set 'dataset_path' in config.toml "
+            "or the FIB_DATASET_PATH environment variable."
+        )
+    return path
+
+
+def build_bench_trace_set(trace_set_path: str, solution: Solution) -> TraceSet:
+    """Load trace set and build a single-operator benchmark TraceSet."""
+    trace_set = TraceSet.from_path(trace_set_path)
+
+    if solution.definition not in trace_set.definitions:
+        raise ValueError(f"Definition '{solution.definition}' not found in trace set")
+
+    definition = trace_set.definitions[solution.definition]
+    workloads = trace_set.workloads.get(solution.definition, [])
+
+    if not workloads:
+        raise ValueError(f"No workloads found for definition '{solution.definition}'")
+
+    return TraceSet(
+        root=trace_set.root,
+        definitions={definition.name: definition},
+        solutions={definition.name: [solution]},
+        workloads={definition.name: workloads},
+        traces={definition.name: []},
+    )
+
+
+def _load_workloads() -> list[dict]:
+    """Load and parse all workloads from docs/workloads.jsonl."""
+    if not WORKLOADS_PATH.exists():
+        return []
+    with open(WORKLOADS_PATH) as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+# ---------------------------------------------------------------------------
 # Baseline caching
 # ---------------------------------------------------------------------------
 
 def get_workload_uuids() -> set:
     """Read workload UUIDs from docs/workloads.jsonl."""
-    workloads_path = PROJECT_ROOT / "docs" / "workloads.jsonl"
-    uuids = set()
-    if workloads_path.exists():
-        with open(workloads_path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    w = json.loads(line)
-                    uuids.add(w["workload"]["uuid"])
-    return uuids
+    return {w["workload"]["uuid"] for w in _load_workloads()}
 
 
 def load_baseline() -> dict | None:
@@ -168,8 +214,7 @@ def pack_reference_as_solution() -> Solution:
     solution, so it can be benchmarked to measure reference latency.
     """
     # Read reference code from definition.json
-    def_path = PROJECT_ROOT / "docs" / "definition.json"
-    with open(def_path) as f:
+    with open(DEFINITION_PATH) as f:
         definition = json.load(f)
 
     ref_code = definition.get("reference", "")
@@ -283,10 +328,13 @@ def run_and_report(
 # ---------------------------------------------------------------------------
 
 def find_group_axis() -> str:
-    """Find the first variable axis from the definition, for grouping results."""
-    def_path = PROJECT_ROOT / "docs" / "definition.json"
-    if def_path.exists():
-        with open(def_path) as f:
+    """Find the first variable axis from the definition, for grouping results.
+
+    NOTE: A parameterized version exists in generate_context.py (for spawn-time use).
+    Keep both in sync if the logic changes.
+    """
+    if DEFINITION_PATH.exists():
+        with open(DEFINITION_PATH) as f:
             definition = json.load(f)
         for name, info in definition.get("axes", {}).items():
             if info.get("type") == "var":
@@ -300,15 +348,10 @@ def compute_score(results: dict) -> dict:
     If ANY workload is not PASSED, the kernel is invalid and final_score=None.
     """
     group_axis = find_group_axis()
-    workloads_path = PROJECT_ROOT / "docs" / "workloads.jsonl"
     uuid_to_group = {}
-    if workloads_path.exists() and group_axis:
-        with open(workloads_path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    w = json.loads(line)
-                    uuid_to_group[w["workload"]["uuid"]] = w["workload"]["axes"].get(group_axis, "?")
+    if group_axis:
+        for w in _load_workloads():
+            uuid_to_group[w["workload"]["uuid"]] = w["workload"]["axes"].get(group_axis, "?")
 
     all_speedups = []
     by_group = {}

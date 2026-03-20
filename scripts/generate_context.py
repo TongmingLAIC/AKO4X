@@ -89,7 +89,11 @@ def generate_workload_summary(workloads: list, axes: dict) -> str:
 
 
 def find_group_axis(axes: dict) -> str:
-    """Find the first variable axis name (used for scoring display)."""
+    """Find the first variable axis name (used for scoring display).
+
+    NOTE: A disk-reading version exists in bench_utils.py (for child-environment runtime).
+    Keep both in sync if the logic changes.
+    """
     for name, info in axes.items():
         if info.get("type") == "var":
             return name
