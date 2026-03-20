@@ -1,4 +1,4 @@
-# kernel-opt-agent
+# AKO4FIB — Agentic Kernel Optimization for FlashInfer-Bench
 
 A tool for automated GPU kernel optimization using Code Agents (e.g. Claude Code). Built on the [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench) SDK, it supports any flashinfer-bench compatible dataset, including user-defined operators.
 
@@ -13,7 +13,7 @@ python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64
 
 # Enter the child environment and start your code agent
 # (keep the same shell so your Python environment stays activated)
-cd ../kernel-opt-agent-run-001
+cd ../ako4fib-run-001
 claude
 ```
 
@@ -74,7 +74,7 @@ To guide the agent toward a specific language, use `HINTS.md`:
 ```bash
 # Create environment, then edit HINTS.md before launching the agent
 python spawn.py --operator my_op
-cd ../kernel-opt-agent-run-*/
+cd ../ako4fib-run-*/
 echo "Use Triton for this kernel." >> HINTS.md
 claude
 
@@ -107,14 +107,14 @@ Some languages require extra packages:
 ## How It Works
 
 1. `python spawn.py --operator <name>` discovers the operator definition and workloads from the dataset
-2. Creates a child environment `kernel-opt-agent-run-NNN[-label]/` with everything the agent needs
+2. Creates a child environment `ako4fib-run-NNN[-label]/` with everything the agent needs
 3. You start your code agent (e.g. `claude`) in the child environment
 4. The agent reads `CLAUDE.md` and `HINTS.md`, then iteratively optimizes the kernel
 
 ### Child Environment Structure
 
 ```
-kernel-opt-agent-run-NNN/
+ako4fib-run-NNN/
 ├── CLAUDE.md                   # Auto-generated task spec (operator details + instructions)
 ├── HINTS.md                    # User-editable hints and constraints
 ├── config.toml                 # Operator configuration (agent updates language/entry_point)
@@ -232,8 +232,8 @@ bash scripts/bench.sh --force-baseline    # Force re-profile reference
 
 ```bash
 # Clone the repository
-git clone https://github.com/flashinfer-ai/kernel-opt-agent.git
-cd kernel-opt-agent
+git clone https://github.com/sha7doww/AKO4FIB.git
+cd AKO4FIB
 
 # Create and activate a virtual environment
 python3.12 -m venv venv

@@ -1,4 +1,4 @@
-# kernel-opt-agent — Developer Guide
+# AKO4FIB — Developer Guide
 
 This is the **template repository** for spawning isolated GPU kernel optimization environments.
 It is NOT an optimization environment itself — use `spawn.py` to create one.
@@ -15,7 +15,7 @@ Supports any flashinfer-bench compatible dataset, including user-defined operato
 ## Directory Structure
 
 ```
-kernel-opt-agent/
+AKO4FIB/
 ├── CLAUDE.md                          # This file (developer guide for the template repo)
 ├── README.md                          # Human-facing usage guide
 ├── spawn.py                           # Creates isolated child environments
@@ -96,7 +96,7 @@ Some languages require extra packages to be installed in the Python environment:
    - `permissions`: Claude Code permissions (Bash, Edit, Read, Write, etc.)
 5. Auto-discovers operator definition from `<dataset>/definitions/*/<operator>.json`
 6. Calls `generate_context()` to extract template variables (shapes, workload summary, etc.)
-7. Creates `kernel-opt-agent-run-{label}/` (with `--name`) or `kernel-opt-agent-run-{YYYYMMDD_HHMMSS}/`
+7. Creates `ako4fib-run-{label}/` (with `--name`) or `ako4fib-run-{YYYYMMDD_HHMMSS}/`
 8. Copies definition.json and workloads.jsonl from the dataset
 9. Auto-generates `config.toml` with operator name, GPU, and agent-editable fields (language, entry_point, dps) at the bottom
 10. Copies backend-specific bench script and runner (`run_local.py` or `run_modal.py`)

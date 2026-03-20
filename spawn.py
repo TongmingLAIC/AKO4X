@@ -177,14 +177,14 @@ def read_fragment(path, fallback=None):
 def make_child_name(label):
     """Generate child directory name.
 
-    With label: kernel-opt-agent-run-{label} (error if exists).
-    Without label: kernel-opt-agent-run-{YYYYMMDD_HHMMSS}.
+    With label: ako4fib-run-{label} (error if exists).
+    Without label: ako4fib-run-{YYYYMMDD_HHMMSS}.
     """
     from datetime import datetime
 
     if label:
-        return f"kernel-opt-agent-run-{label}"
-    return f"kernel-opt-agent-run-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        return f"ako4fib-run-{label}"
+    return f"ako4fib-run-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
 
 def render_template(task_text, placeholders):
@@ -330,11 +330,11 @@ def init_git(child_dir, operator, mode, backend):
         return
 
     try:
-        msg = f"Initial commit (spawned from kernel-opt-agent, operator={operator}, mode={mode}, backend={backend})"
+        msg = f"Initial commit (spawned from AKO4FIB, operator={operator}, mode={mode}, backend={backend})"
         subprocess.run(["git", "init", "-q"], cwd=child_dir, check=True)
         # Set repo-local user config so commit works without global git config
-        subprocess.run(["git", "config", "user.name", "kernel-opt-agent"], cwd=child_dir, check=True)
-        subprocess.run(["git", "config", "user.email", "kernel-opt-agent@local"], cwd=child_dir, check=True)
+        subprocess.run(["git", "config", "user.name", "ako4fib"], cwd=child_dir, check=True)
+        subprocess.run(["git", "config", "user.email", "ako4fib@local"], cwd=child_dir, check=True)
         subprocess.run(["git", "add", "-A"], cwd=child_dir, check=True)
         subprocess.run(["git", "commit", "-q", "-m", msg], cwd=child_dir, check=True)
     except (subprocess.CalledProcessError, OSError) as e:
