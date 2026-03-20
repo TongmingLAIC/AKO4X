@@ -27,9 +27,16 @@ kernel-opt-agent/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
-│   │   ├── language-guide.md          # Comprehensive language reference for agents
+│   │   ├── language-guide.md          # Inline language reference (table + pointer)
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
+│   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
+│   │   ├── python.md
+│   │   ├── triton.md
+│   │   ├── tilelang.md
+│   │   ├── cute-dsl.md
+│   │   ├── cuda.md
+│   │   └── cpp.md
 │   └── agent/
 │       └── claude.json                # Claude Code agent config (output filenames + permissions)
 └── scripts/
@@ -52,8 +59,8 @@ Child environments are created without a fixed language. The agent chooses the l
   file extensions for the initial `config.toml`, but the agent can change it.
 - **config.toml**: Contains `language`, `entry_point`, and `destination_passing_style` fields that the
   agent updates to match its kernel files before benchmarking.
-- **Language guide**: `templates/fragments/language-guide.md` is embedded in the task file and provides
-  comprehensive patterns for all supported languages (Python, Triton, TileLang, CuTe DSL, CUDA, C++).
+- **Language guide**: `templates/fragments/language-guide.md` embeds a quick reference table in the task file;
+  detailed per-language docs live in `templates/languages/` and are copied to `docs/languages/` in child envs.
 
 ### Supported Languages and Entry Points
 
@@ -121,7 +128,8 @@ Templates use these placeholders (replaced at spawn time):
 
 - **Task template**: Edit `templates/task.md` — the main template assembled into the child's task file
 - **Objective fragments**: Edit `templates/fragments/objective-scratch.md` or `objective-existing.md`
-- **Language guide**: Edit `templates/fragments/language-guide.md` — comprehensive language reference embedded in task file
+- **Language guide**: Edit `templates/fragments/language-guide.md` — inline quick reference table embedded in task file
+- **Language detail docs**: Edit files in `templates/languages/` — per-language patterns copied to child `docs/languages/`
 - **Backend execution instructions**: Edit `templates/fragments/backend-local.md` or `backend-modal.md`
 - **Agent config**: Edit `templates/agent/claude.json` (output filenames + permissions)
 - **Hints template**: Edit `templates/hints.md`

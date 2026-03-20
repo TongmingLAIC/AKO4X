@@ -235,6 +235,7 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     shutil.copy2(workloads_path, child_dir / "docs" / "workloads.jsonl")
     shutil.copy2(PARENT_DIR / "scripts" / "pack_solution.py", child_dir / "scripts" / "pack_solution.py")
     shutil.copy2(PARENT_DIR / "scripts" / "bench_utils.py", child_dir / "scripts" / "bench_utils.py")
+    shutil.copytree(PARENT_DIR / "templates" / "languages", child_dir / "docs" / "languages")
 
     # Copy hints file
     shutil.copy2(Path(hints_path), child_dir / hints_filename)

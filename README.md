@@ -120,7 +120,14 @@ kernel-opt-agent-run-NNN/
 ├── .gitignore
 ├── docs/
 │   ├── definition.json         # Operator definition
-│   └── workloads.jsonl         # Benchmark workloads
+│   ├── workloads.jsonl         # Benchmark workloads
+│   └── languages/              # Per-language patterns and constraints
+│       ├── python.md
+│       ├── triton.md
+│       ├── tilelang.md
+│       ├── cute-dsl.md
+│       ├── cuda.md
+│       └── cpp.md
 ├── solution/                   # Flat directory — agent puts kernel files here
 │   └── kernel.py               # Starting point (reference implementation in scratch mode)
 ├── scripts/
