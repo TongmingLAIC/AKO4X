@@ -34,11 +34,27 @@ def get_language() -> str:
         config = tomllib.load(f)
     return config["build"]["language"]
 
-# --- Benchmark constants ---
-BASELINE_ITERATIONS = 20   # Reference profiling: low to avoid CUPTI cache explosion
-SOLUTION_ITERATIONS = 100  # Solution profiling: high for accuracy
-NUM_TRIALS = 5
-WARMUP_RUNS = 3
+
+def _load_benchmark_config() -> dict:
+    """Read [benchmark] section from config.toml with defaults."""
+    config_path = PROJECT_ROOT / "config.toml"
+    with open(config_path, "rb") as f:
+        config = tomllib.load(f)
+    bench = config.get("benchmark", {})
+    return {
+        "baseline_iterations": bench.get("baseline_iterations", 20),
+        "solution_iterations": bench.get("solution_iterations", 100),
+        "num_trials": bench.get("num_trials", 5),
+        "warmup_runs": bench.get("warmup_runs", 3),
+    }
+
+
+# --- Benchmark settings (from config.toml [benchmark] section, with defaults) ---
+_bench_cfg = _load_benchmark_config()
+BASELINE_ITERATIONS = _bench_cfg["baseline_iterations"]
+SOLUTION_ITERATIONS = _bench_cfg["solution_iterations"]
+NUM_TRIALS = _bench_cfg["num_trials"]
+WARMUP_RUNS = _bench_cfg["warmup_runs"]
 
 
 # ---------------------------------------------------------------------------

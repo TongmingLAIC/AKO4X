@@ -304,6 +304,12 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
             f'language = "{language}"\n'
             f'entry_point = "{entry_point}"\n'
             f'destination_passing_style = false\n'
+            f'\n'
+            f'[benchmark]\n'
+            f'baseline_iterations = 20\n'
+            f'solution_iterations = 100\n'
+            f'num_trials = 5\n'
+            f'warmup_runs = 3\n'
         )
         config_path.write_text(config_toml)
 
