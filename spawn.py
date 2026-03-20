@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""setup.py - Create isolated child environments for GPU kernel optimization.
+"""spawn.py - Create isolated child environments for GPU kernel optimization.
 
 Usage:
-    python setup.py --operator <name>                                 # local, auto-detect GPU, from scratch
-    python setup.py --operator <name> --name "experiment_1"           # local with label
-    python setup.py --operator <name> --backend modal --gpu b200      # Modal B200, from scratch
-    python setup.py --operator <name> --mode existing --kernel /path/to/kernel.py
-    python setup.py --operator <name> --dataset /path/to/dataset      # custom dataset
-    python setup.py --operator <name> --task /path/to/task.md         # custom task template
-    python setup.py --operator <name> --hints /path/to/hints.md      # custom hints
-    python setup.py                                                   # list available operators
+    python spawn.py --operator <name>                                 # local, auto-detect GPU, from scratch
+    python spawn.py --operator <name> --name "experiment_1"           # local with label
+    python spawn.py --operator <name> --backend modal --gpu b200      # Modal B200, from scratch
+    python spawn.py --operator <name> --mode existing --kernel /path/to/kernel.py
+    python spawn.py --operator <name> --dataset /path/to/dataset      # custom dataset
+    python spawn.py --operator <name> --task /path/to/task.md         # custom task template
+    python spawn.py --operator <name> --hints /path/to/hints.md      # custom hints
+    python spawn.py                                                   # list available operators
 """
 
 import argparse
@@ -30,7 +30,7 @@ from generate_context import generate_context
 
 
 USAGE_LINE = (
-    "Usage: python setup.py --operator <name> [--dataset <path>] "
+    "Usage: python spawn.py --operator <name> [--dataset <path>] "
     "[--mode scratch|existing] [--backend local|modal] "
     "[--gpu <name>] [--agent claude] [--kernel <path>] [--name <label>] "
     "[--task <path>] [--hints <path>]"

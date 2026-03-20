@@ -1,1 +1,1 @@
-Runs locally in `fi-bench` conda env. Manual Python: `conda run -n fi-bench --no-capture-output python ...`
+Runs locally. Ensure your Python environment is activated before benchmarking. Manual: `python scripts/run_local.py ...`

@@ -1,7 +1,7 @@
 # kernel-opt-agent — Developer Guide
 
 This is the **template repository** for spawning isolated GPU kernel optimization environments.
-It is NOT an optimization environment itself — use `setup.py` to create one.
+It is NOT an optimization environment itself — use `spawn.py` to create one.
 
 ## Repository Purpose
 
@@ -18,7 +18,7 @@ Supports any flashinfer-bench compatible dataset, including user-defined operato
 kernel-opt-agent/
 ├── CLAUDE.md                          # This file (developer guide for the template repo)
 ├── README.md                          # Human-facing usage guide
-├── setup.py                           # Creates isolated child environments
+├── spawn.py                           # Creates isolated child environments
 ├── .gitignore                         # Git ignore rules for this template repo
 ├── templates/
 │   ├── task.md                        # Main task template (assembled into CLAUDE.md at spawn)
@@ -79,13 +79,13 @@ to expose compiled code to Python. Alternatively, use `kernel.cu::symbol_name` w
 
 ### Additional Package Requirements
 
-Some languages require extra packages to be installed in the `fi-bench` conda environment:
+Some languages require extra packages to be installed in the Python environment:
 
 - **tilelang**: Requires `pip install tilelang`. Without it, `TileLangBuilder` is not registered and all workloads report COMPILE_ERROR.
 - **CuTe DSL** (NVIDIA CUTLASS Python DSL): Requires `pip install nvidia-cutlass-dsl`. CuTe DSL kernels are defined in Python via `@CuTeDSL.kernel` / `@CuTeDSL.jit` decorators and compiled at runtime to PTX. Torch tensors are passed to CuTe DSL via `cutlass.cute.runtime.from_dlpack()`.
 - **triton**: Pre-installed with PyTorch, no extra installation needed.
 
-## How setup.py Works
+## How spawn.py Works
 
 1. Parses `--operator`, `--mode`, `--backend`, `--gpu`, `--agent`, `--kernel`, `--name`, `--dataset`, `--task`, `--hints`
 2. If `--operator` not provided, lists available operators from the dataset and exits
@@ -133,7 +133,7 @@ Templates use these placeholders (replaced at spawn time):
 - **Backend execution instructions**: Edit `templates/fragments/backend-local.md` or `backend-modal.md`
 - **Agent config**: Edit `templates/agent/claude.json` (output filenames + permissions)
 - **Hints template**: Edit `templates/hints.md`
-- **Config defaults**: Edit the `config.toml` generation in `setup.py` (`populate_child` function)
+- **Config defaults**: Edit the `config.toml` generation in `spawn.py` (`populate_child` function)
 - **Benchmark scripts**: Edit `scripts/bench.sh`, `scripts/bench_modal.sh`, etc.
 
 ## Baseline Caching
@@ -150,9 +150,9 @@ The benchmark system caches reference implementation performance on the first ru
 - Agents only edit files in `solution/` (and `config.toml`)
 - `config.toml`: `destination_passing_style = false` by default; agent updates `language` and `entry_point` to match kernel files
 - Operator data (definition.json, workloads.jsonl, reference kernel) comes from the dataset at spawn time, not from static files in this repo
-- Benchmark scripts hardcode conda environment name `fi-bench` (the `conda run -n fi-bench` line in `scripts/bench.sh` and `scripts/bench_modal.sh`)
+- Benchmark scripts require an activated Python environment with all dependencies installed
 - Local benchmarking uses CUPTI profiling via `cupti-python` (**requires both `cupti-python >= 13.0.0` and CUDA 13.0+ driver**). If `cupti-python` is not installed or its version is < 13.0, the benchmark gracefully falls back to CUDA events. However, when `cupti-python >= 13.0` is installed but the **CUDA driver** is < 13.0, CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. An upstream fix in flashinfer to catch this runtime failure is pending; until merged, ensure the CUDA driver is >= 13.0 when `cupti-python >= 13.0` is installed (or use Modal backend). CUPTI is strongly recommended for measurement accuracy — CUDA events fallback with low iteration counts (e.g. baseline's 20 iterations) can produce noisy results
-- **flashinfer-bench must be installed from source** (`pip install git+https://...@main`), not from PyPI. The PyPI release (v0.1.2) lags behind the main branch and may lack recent fixes (e.g. CUPTI fallback improvements, benchmark timing updates). The `cupti-python` package also defaults to a version < 13.0 on PyPI — run `pip install -U cupti-python` to get >= 13.0 for CUPTI support
+- **flashinfer-bench** is installed from source (git main branch) via `pyproject.toml`. The PyPI release (v0.1.2) lags behind and may lack recent fixes. `cupti-python>=13.0.0` is also declared in `pyproject.toml` for CUPTI profiling support
 
 ## TVM FFI Builder Limitations
 

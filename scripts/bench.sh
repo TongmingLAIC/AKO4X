@@ -19,4 +19,4 @@ for arg in "$@"; do
     fi
 done
 
-conda run -n fi-bench --no-capture-output python scripts/run_local.py "${ARGS[@]}"
+python scripts/run_local.py "${ARGS[@]}"

@@ -1,1 +1,1 @@
-Runs remotely on Modal (no local GPU needed). Manual Python: `conda run -n fi-bench --no-capture-output python ...`
+Runs remotely on Modal (no local GPU needed). Manual: `modal run scripts/run_modal.py ...`

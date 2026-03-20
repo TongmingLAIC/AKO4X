@@ -6,12 +6,13 @@ A tool for automated GPU kernel optimization using Code Agents (e.g. Claude Code
 
 ```bash
 # List available operators
-python setup.py
+python spawn.py
 
 # Create an optimization environment (local, auto-detect GPU, from scratch)
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64
+python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64
 
 # Enter the child environment and start your code agent
+# (keep the same shell so your Python environment stays activated)
 cd ../kernel-opt-agent-run-001
 claude
 ```
@@ -19,7 +20,7 @@ claude
 ## Setup Options
 
 ```bash
-python setup.py \
+python spawn.py \
   --operator <name> \
   [--dataset /path/to/dataset] \    # default: $FIB_DATASET_PATH
   [--mode scratch|existing] \       # default: scratch
@@ -36,32 +37,32 @@ python setup.py \
 
 ```bash
 # Local, auto-detect GPU, from scratch, with label
-python setup.py --operator gdn_decode_qk4_v8_d128_k_last --name "gdn_exp_1"
+python spawn.py --operator gdn_decode_qk4_v8_d128_k_last --name "gdn_exp_1"
 
 # Local with explicit GPU
-python setup.py --operator gdn_decode_qk4_v8_d128_k_last --gpu h100
+python spawn.py --operator gdn_decode_qk4_v8_d128_k_last --gpu h100
 
 # Local, from existing kernel
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
+python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
     --mode existing --kernel /path/to/kernel.py
 
 # From existing kernel directory (copies all files in directory to solution/)
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
+python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
     --mode existing --kernel /path/to/kernel_dir/
 
 # Modal B200, from scratch (--gpu required for modal)
-python setup.py --operator moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048 \
+python spawn.py --operator moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048 \
     --backend modal --gpu b200 --name "moe_b200"
 
 # Custom dataset
-python setup.py --operator my_custom_op --dataset /path/to/my/traceset
+python spawn.py --operator my_custom_op --dataset /path/to/my/traceset
 
 # Custom task template and hints
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
+python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
     --task ./my_task.md --hints ./my_hints.md
 
 # Legacy flag aliases still work (--prompt → --task, --info → --hints)
-python setup.py --operator my_op --prompt ./my_task.md --info ./my_hints.md
+python spawn.py --operator my_op --prompt ./my_task.md --info ./my_hints.md
 ```
 
 ### Language Selection
@@ -72,14 +73,14 @@ To guide the agent toward a specific language, use `HINTS.md`:
 
 ```bash
 # Create environment, then edit HINTS.md before launching the agent
-python setup.py --operator my_op
+python spawn.py --operator my_op
 cd ../kernel-opt-agent-run-*/
 echo "Use Triton for this kernel." >> HINTS.md
 claude
 
 # Or provide a hints file at setup time
 echo "Write the kernel in CUDA." > my_hints.md
-python setup.py --operator my_op --hints my_hints.md
+python spawn.py --operator my_op --hints my_hints.md
 ```
 
 The agent can write kernels in Python/PyTorch, Triton, TileLang, CuTe DSL, CUDA, or C++. See the Language Reference section in the generated `CLAUDE.md` for details on each language.
@@ -95,7 +96,7 @@ When using `--mode existing --kernel /path/to/kernel`:
 
 ### Language/Package Notes
 
-Some languages require extra packages in the `fi-bench` environment:
+Some languages require extra packages:
 
 - **TileLang**: `pip install tilelang` — without it, solutions report COMPILE_ERROR
 - **CuTe DSL**: `pip install nvidia-cutlass-dsl` — CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
@@ -105,7 +106,7 @@ Some languages require extra packages in the `fi-bench` environment:
 
 ## How It Works
 
-1. `python setup.py --operator <name>` discovers the operator definition and workloads from the dataset
+1. `python spawn.py --operator <name>` discovers the operator definition and workloads from the dataset
 2. Creates a child environment `kernel-opt-agent-run-NNN[-label]/` with everything the agent needs
 3. You start your code agent (e.g. `claude`) in the child environment
 4. The agent reads `CLAUDE.md` and `HINTS.md`, then iteratively optimizes the kernel
@@ -148,7 +149,7 @@ kernel-opt-agent-run-NNN/
 The default task template (`templates/task.md`) defines the agent's instructions. Override it with `--task`:
 
 ```bash
-python setup.py --operator my_op --task ./my_task.md
+python spawn.py --operator my_op --task ./my_task.md
 ```
 
 ### Custom Hints
@@ -156,7 +157,7 @@ python setup.py --operator my_op --task ./my_task.md
 `HINTS.md` is placed in each child environment for ad-hoc hints (including language preferences). Override the template with `--hints`:
 
 ```bash
-python setup.py --operator my_op --hints ./my_analysis.md
+python spawn.py --operator my_op --hints ./my_analysis.md
 ```
 
 Or edit `HINTS.md` directly in the child environment before launching.
@@ -226,54 +227,33 @@ bash scripts/bench.sh --force-baseline    # Force re-profile reference
 - **NVIDIA GPU**: CUDA-capable GPU (A100, H100, B200, etc.)
 - **CUDA Driver**: 13.0+ **required** for CUPTI profiling (must pair with `cupti-python >= 13.0.0`). If `cupti-python` is not installed or version < 13.0, benchmarking falls back to CUDA events automatically. But if `cupti-python >= 13.0` is installed while the **driver** is < 13.0, CUPTI fails at runtime — see note below
 - **Python**: 3.10 – 3.13 (3.12 recommended)
-- **Conda**: For environment management
 
-### Option 1: Using Conda (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/flashinfer-ai/kernel-opt-agent.git
-cd kernel-opt-agent
-
-# Create conda environment
-conda env create -f environment.yml
-
-# Activate environment
-conda activate fi-bench
-
-# Install flashinfer-bench from source (do NOT use `pip install flashinfer-bench` — PyPI lags behind)
-pip install git+https://github.com/flashinfer-ai/flashinfer-bench.git@main
-
-# Upgrade cupti-python for CUPTI profiling (PyPI default may be < 13.0)
-pip install -U cupti-python
-
-# Set dataset path (only needed for setup.py; child envs store it in config.toml)
-export FIB_DATASET_PATH=/path/to/flashinfer-trace
-```
-
-### Option 2: Using pip
+### Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/flashinfer-ai/kernel-opt-agent.git
 cd kernel-opt-agent
 
-# Create virtual environment
+# Create and activate a virtual environment
 python3.12 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (includes flashinfer-bench from source and cupti-python>=13)
+pip install .
 
-# Install flashinfer-bench from source (do NOT use `pip install flashinfer-bench` — PyPI lags behind)
-pip install git+https://github.com/flashinfer-ai/flashinfer-bench.git@main
+# For Modal cloud backend:
+# pip install ".[modal]"
 
-# Upgrade cupti-python for CUPTI profiling (PyPI default may be < 13.0)
-pip install -U cupti-python
+# For TileLang or CuTe DSL:
+# pip install ".[tilelang]"
+# pip install ".[cutlass-dsl]"
 
-# Set dataset path (only needed for setup.py; child envs store it in config.toml)
+# Set dataset path (only needed for spawn.py; child envs store it in config.toml)
 export FIB_DATASET_PATH=/path/to/flashinfer-trace
 ```
+
+> **Note**: Keep this environment activated when running `spawn.py` and when launching `claude` in child environments. The benchmark scripts use `python` from `PATH`, so the activated environment must contain all dependencies.
 
 ### Modal Backend Setup (Optional)
 
@@ -281,7 +261,7 @@ For cloud benchmarking on Modal:
 
 ```bash
 # Authenticate with Modal
-conda run -n fi-bench --no-capture-output modal setup
+modal setup
 
 # Create and upload trace volume
 modal volume create flashinfer-trace
@@ -313,7 +293,7 @@ except Exception as e:
 "
 
 # List available operators
-python setup.py --dataset /path/to/flashinfer-trace
+python spawn.py --dataset /path/to/flashinfer-trace
 ```
 
 **⚠️ Note**: Local benchmarking uses CUPTI profiling by default via `cupti-python`. There are two fallback scenarios:
@@ -322,7 +302,7 @@ python setup.py --dataset /path/to/flashinfer-trace
 
 An upstream fix in flashinfer to catch this runtime failure is pending but not yet merged. **Current workarounds**: ensure CUDA driver >= 13.0 when `cupti-python >= 13.0` is installed, or use the Modal backend (`--backend modal`).
 
-**⚠️ PyPI versions**: Do **not** install flashinfer-bench from PyPI (`pip install flashinfer-bench`) — the PyPI release (v0.1.2) lags behind the main branch and may lack recent fixes. Always install from source as shown above. Similarly, `pip install cupti-python` may default to a version < 13.0 (e.g. 12.8.0) which silently falls back to CUDA events — use `pip install -U cupti-python` to get >= 13.0.
+**⚠️ PyPI versions**: `pyproject.toml` pins `flashinfer-bench` to the git main branch (not PyPI's v0.1.2, which lags behind) and `cupti-python>=13.0.0`. Both are installed automatically via `pip install .`.
 
 ## Requirements Summary
 
@@ -332,14 +312,9 @@ See **Installation** section above for detailed setup instructions.
 
 **Local backend (default):**
 - NVIDIA GPU with CUDA 13.0+ driver **required** for CUPTI profiling (graceful fallback if `cupti-python` is missing/old, but driver < 13.0 with `cupti-python >= 13.0` causes runtime failure — see note above)
-- Conda environment named `fi-bench` (hardcoded in `scripts/bench.sh`)
 - Dataset path (stored in child env's `config.toml` at spawn time; `FIB_DATASET_PATH` env var as fallback)
 
 **Modal backend:**
 - `--gpu` flag required (e.g., `--gpu b200`, `--gpu h100`)
 - Modal authenticated and volume uploaded
 - No local GPU or CUDA driver required
-
-**Note on Environment Name**: The benchmark scripts (`scripts/bench.sh`, `scripts/bench_modal.sh`) hardcode `conda run -n fi-bench`. If you use a different environment name, either:
-- Rename your environment to `fi-bench`, or
-- Modify the `conda run -n fi-bench` line in `scripts/bench.sh` in spawned child environments

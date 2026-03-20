@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kernel-opt-agent"
+version = "0.1.0"
+description = "Scaffolding for GPU kernel optimization environments"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.9.1",
+    "triton>=3.5.0",
+    "numpy>=1.24.0",
+    "cupti-python>=13.0.0",
+    "apache-tvm-ffi>=0.1.6,!=0.1.8,!=0.1.8.post0,<0.2",
+    "flashinfer-bench @ git+https://github.com/flashinfer-ai/flashinfer-bench.git@main",
+    "torch-c-dlpack-ext",
+    "cuda-python",
+    "nvidia-cudnn-frontend>=1.13.0",
+    "nvidia-ml-py",
+    "ninja",
+    "packaging>=24.2",
+    "einops",
+    "tabulate",
+    "tqdm",
+    "click",
+]
+
+[project.optional-dependencies]
+modal = ["modal>=1.3.0"]
+tilelang = ["tilelang", "cuda-tile"]
+cutlass-dsl = ["nvidia-cutlass-dsl>=4.3.4"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

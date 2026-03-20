@@ -20,4 +20,4 @@ for arg in "$@"; do
     fi
 done
 
-conda run -n fi-bench --no-capture-output modal run scripts/run_modal.py "${ARGS[@]}"
+modal run scripts/run_modal.py "${ARGS[@]}"

@@ -6,6 +6,9 @@ __pycache__/
 # Spawned child environments
 kernel-opt-agent-run-*/
 
+# Python packaging
+*.egg-info/
+
 # OS / editor
 .DS_Store
 Thumbs.db
