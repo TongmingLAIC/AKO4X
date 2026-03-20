@@ -1,4 +1,4 @@
-# Getting Started
+# Installation
 
 ## Prerequisites
 
@@ -53,16 +53,6 @@ except Exception as e:
 "
 ```
 
-List available operators to confirm the dataset is configured:
-
-```bash
-python spawn.py --dataset /path/to/flashinfer-trace
-```
-
-### Version Note
-
-`pyproject.toml` pins `flashinfer-bench` to the git main branch (not PyPI's v0.1.2, which lags behind). Both `flashinfer-bench` and `cupti-python>=13.0.0` are installed automatically via `pip install .`.
-
 ## Modal Backend Setup
 
 For cloud benchmarking on Modal:
@@ -77,3 +67,7 @@ modal volume put flashinfer-trace /path/to/flashinfer-trace/
 ```
 
 See [Usage Guide](usage.md) for how to spawn with `--backend modal`.
+
+## Common Issues
+
+If you encounter CUPTI driver mismatches, TVM FFI linking errors, or flashinfer-bench version problems, see [Troubleshooting](troubleshooting.md).

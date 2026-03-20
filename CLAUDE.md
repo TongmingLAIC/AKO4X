@@ -32,10 +32,9 @@ AKO4FIB/
 ├── spawn.py                           # Creates isolated child environments
 ├── pyproject.toml                     # Package metadata and dependencies
 ├── docs/                              # User-facing documentation
-│   ├── getting-started.md             # Prerequisites, installation, Modal setup
+│   ├── installation.md                # Prerequisites, installation, Modal setup
 │   ├── usage.md                       # spawn.py options, modes, language selection
 │   ├── child-environment.md           # Structure, config.toml, benchmarking, profiling
-│   ├── custom-datasets.md             # Dataset schema and reference requirements
 │   └── troubleshooting.md             # CUPTI, TVM FFI, version issues
 ├── templates/
 │   ├── task.md                        # Main task template (assembled into child's CLAUDE.md)
