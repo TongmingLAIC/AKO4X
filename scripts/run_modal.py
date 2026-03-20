@@ -31,10 +31,8 @@ if _config_path.exists():
     with open(_config_path, "rb") as _f:
         _config = tomllib.load(_f)
     _GPU_TYPE = _config.get("build", {}).get("gpu", "b200").upper()
-    _language = _config.get("build", {}).get("language", "triton")
 else:
     _GPU_TYPE = "B200"
-    _language = "triton"
 
 import modal
 from flashinfer_bench import Benchmark, BenchmarkConfig, Solution, TraceSet
@@ -44,21 +42,20 @@ app = modal.App("flashinfer-bench")
 trace_volume = modal.Volume.from_name("flashinfer-trace", create_if_missing=True)
 TRACE_SET_PATH = "/data"
 
-# Base deps for all languages
-_pip_deps = ["torch", "numpy", "cupti-python"]
-if _language == "triton":
-    _pip_deps.append("triton")
-if _language == "tilelang":
-    _pip_deps.append("tilelang")
-if _language in ("cuda", "cpp"):
-    _pip_deps.append("tvm-ffi-ct")
+# Universal image: all language deps pre-installed
+_pip_deps = ["torch", "numpy", "cupti-python", "triton", "tilelang", "apache-tvm-ffi"]
+
+_base_image = (
+    modal.Image.from_registry("nvidia/cuda:12.8.0-devel-ubuntu22.04", add_python="3.12")
+    .env({"CUDA_HOME": "/usr/local/cuda"})
+)
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    _base_image
     .pip_install(*_pip_deps)
     .pip_install("flashinfer-bench @ https://github.com/flashinfer-ai/flashinfer-bench/archive/refs/heads/main.tar.gz")
     .pip_install("torch-c-dlpack-ext")
-    .copy_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/bench_utils.py")
+    .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/bench_utils.py")
 )
 
 

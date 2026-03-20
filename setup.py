@@ -7,7 +7,6 @@ Usage:
     python setup.py --operator <name> --backend modal --gpu b200      # Modal B200, from scratch
     python setup.py --operator <name> --mode existing --kernel /path/to/kernel.py
     python setup.py --operator <name> --dataset /path/to/dataset      # custom dataset
-    python setup.py --operator <name> --language cuda                 # CUDA kernel (supported: python, triton, cuda, cpp, tilelang)
     python setup.py --operator <name> --task /path/to/task.md         # custom task template
     python setup.py --operator <name> --hints /path/to/hints.md      # custom hints
     python setup.py                                                   # list available operators
@@ -33,21 +32,9 @@ from generate_context import generate_context
 USAGE_LINE = (
     "Usage: python setup.py --operator <name> [--dataset <path>] "
     "[--mode scratch|existing] [--backend local|modal] "
-    "[--language python|triton|cuda|cpp|tilelang] "
     "[--gpu <name>] [--agent claude] [--kernel <path>] [--name <label>] "
     "[--task <path>] [--hints <path>]"
 )
-
-# All languages supported by flashinfer-bench SDK
-SUPPORTED_LANGUAGES = ["python", "triton", "cuda", "cpp", "tilelang"]
-LANGUAGE_NAMES = {
-    "python": "Python", "triton": "Triton", "cuda": "CUDA",
-    "cpp": "C++", "tilelang": "TileLang",
-}
-
-# Languages where scratch mode can use the definition.json reference directly
-# (reference is always Python/Triton code)
-PYTHON_LIKE = {"python", "triton", "tilelang"}
 
 
 def parse_args():
@@ -57,7 +44,6 @@ def parse_args():
     parser.add_argument("--operator", default="")
     parser.add_argument("--mode", default="scratch", choices=["scratch", "existing"])
     parser.add_argument("--backend", default="local", choices=["local", "modal"])
-    parser.add_argument("--language", default="triton", choices=SUPPORTED_LANGUAGES)
     parser.add_argument("--gpu", default="")
     parser.add_argument("--agent", default="claude")
     parser.add_argument("--kernel", default="")
@@ -151,15 +137,32 @@ def discover_operator(dataset_path, operator):
     return definition_path, workloads_path, op_type
 
 
-def validate_existing_mode(kernel_path, language):
-    """Validate kernel file for existing mode."""
+def validate_existing_mode(kernel_path):
+    """Validate kernel path for existing mode."""
     if not kernel_path:
         sys.exit("Error: --mode existing requires --kernel <path>")
     kp = Path(kernel_path)
-    if not kp.is_file():
-        sys.exit(f"Error: Kernel file not found: {kernel_path}")
-    if language in PYTHON_LIKE and "def run(" not in kp.read_text():
-        sys.exit(f"Error: Kernel file does not contain 'def run(': {kernel_path}")
+    if not kp.exists():
+        sys.exit(f"Error: Kernel path not found: {kernel_path}")
+
+
+def infer_language(kernel_path):
+    """Infer language from kernel file extension. Returns (language, entry_point)."""
+    ext_map = {
+        ".cu": ("cuda", "binding.py::kernel"),
+        ".cpp": ("cpp", "binding.py::kernel"),
+        ".py": ("python", "kernel.py::run"),
+    }
+    kp = Path(kernel_path)
+    if kp.is_dir():
+        # Check for .cu or .cpp files in directory
+        for ext, (lang, ep) in ext_map.items():
+            if list(kp.glob(f"*{ext}")):
+                return lang, ep
+        return "python", "kernel.py::run"
+    ext = kp.suffix.lower()
+    lang, ep = ext_map.get(ext, ("python", "kernel.py::run"))
+    return lang, ep
 
 
 def read_fragment(path, fallback=None):
@@ -193,10 +196,11 @@ def render_template(task_text, placeholders):
     block_keys = {
         "{{OBJECTIVE}}", "{{BACKEND}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
+        "{{LANGUAGE_GUIDE}}",
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
-        "{{NUM_WORKLOADS}}", "{{LANGUAGE_NAME}}", "{{LANGUAGE}}", "{{GPU_NAME}}",
+        "{{NUM_WORKLOADS}}", "{{GPU_NAME}}",
     ]
 
     lines = []
@@ -218,11 +222,11 @@ def render_template(task_text, placeholders):
     return "".join(lines)
 
 
-def populate_child(child_dir, *, language, operator, gpu, mode, backend, kernel_path,
+def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
                    definition_path, workloads_path, dataset_path, agent_config, hints_path, hints_filename):
     """Create child directory structure and populate with files."""
-    # Create directories
-    for subdir in [".claude", "docs", "scripts", f"solution/{language}"]:
+    # Create directories — flat solution/ (no language subdirectory)
+    for subdir in [".claude", "docs", "scripts", "solution"]:
         (child_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     # Copy common files
@@ -235,28 +239,74 @@ def populate_child(child_dir, *, language, operator, gpu, mode, backend, kernel_
     # Copy hints file
     shutil.copy2(Path(hints_path), child_dir / hints_filename)
 
-    # Generate config.toml with per-language entry_point
-    if language in PYTHON_LIKE:
-        entry_point = "kernel.py::run"
-    elif language in ("cuda", "cpp"):
-        entry_point = "binding.py::kernel"
+    # Determine language and entry_point for config.toml
+    language = "python"
+    entry_point = "kernel.py::run"
+
+    if mode == "scratch":
+        # Extract reference from definition.json → solution/kernel.py
+        definition = json.loads(definition_path.read_text())
+        ref = definition.get("reference", "")
+        if not ref:
+            sys.exit("Error: No reference field in definition.json")
+        (child_dir / "solution" / "kernel.py").write_text(ref)
     else:
-        entry_point = "kernel.py::run"  # fallback
-    dataset_line = f'dataset_path = "{dataset_path.resolve()}"\n' if backend == "local" else ""
-    config_toml = (
-        f'[solution]\n'
-        f'name = "{operator}-solution"\n'
-        f'definition = "{operator}"\n'
-        f'author = "user"\n'
-        f'\n'
-        f'[build]\n'
-        f'language = "{language}"\n'
-        f'gpu = "{gpu}"\n'
-        f'entry_point = "{entry_point}"\n'
-        f'destination_passing_style = false\n'
-        f'{dataset_line}'
-    )
-    (child_dir / "config.toml").write_text(config_toml)
+        # Existing mode: copy kernel files to solution/
+        kp = Path(kernel_path)
+        if kp.is_dir():
+            # Copy all files from directory
+            for f in kp.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, child_dir / "solution" / f.name)
+        else:
+            # Copy the kernel file
+            shutil.copy2(kp, child_dir / "solution" / kp.name)
+            # Copy sibling files (binding.py, other source files)
+            for sibling in kp.parent.iterdir():
+                if sibling.is_file() and sibling != kp:
+                    ext = sibling.suffix.lower()
+                    if ext in (".py", ".cu", ".cpp", ".h", ".hpp", ".cuh", ".toml"):
+                        if sibling.name != "config.toml":
+                            shutil.copy2(sibling, child_dir / "solution" / sibling.name)
+
+        # If config.toml colocated with kernel, use it
+        colocated_config = (kp if kp.is_dir() else kp.parent) / "config.toml"
+        if colocated_config.is_file():
+            shutil.copy2(colocated_config, child_dir / "config.toml")
+            print(f"Note: Using config.toml from {colocated_config.resolve()}")
+            # Read language/entry_point from colocated config to skip generation
+            try:
+                import tomllib
+            except ImportError:
+                import tomli as tomllib
+            with open(colocated_config, "rb") as f:
+                colocated = tomllib.load(f)
+            language = colocated.get("build", {}).get("language", language)
+            entry_point = colocated.get("build", {}).get("entry_point", entry_point)
+        else:
+            # Infer language from file extension
+            language, entry_point = infer_language(kernel_path)
+
+    # Generate config.toml (unless colocated config was already copied)
+    config_path = child_dir / "config.toml"
+    if not config_path.exists():
+        dataset_line = f'dataset_path = "{dataset_path.resolve()}"\n' if backend == "local" else ""
+        config_toml = (
+            f'[solution]\n'
+            f'name = "{operator}-solution"\n'
+            f'definition = "{operator}"\n'
+            f'author = "user"\n'
+            f'\n'
+            f'[build]\n'
+            f'gpu = "{gpu}"\n'
+            f'{dataset_line}'
+            f'\n'
+            f'# ── Agent-configurable (update to match your kernel) ──\n'
+            f'language = "{language}"\n'
+            f'entry_point = "{entry_point}"\n'
+            f'destination_passing_style = false\n'
+        )
+        config_path.write_text(config_toml)
 
     # Copy backend-specific scripts
     if backend == "local":
@@ -271,56 +321,15 @@ def populate_child(child_dir, *, language, operator, gpu, mode, backend, kernel_
     settings_path = child_dir / ".claude" / "settings.local.json"
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 
-    # Copy or extract kernel
-    kernel_dest = child_dir / "solution" / language
-    if mode == "scratch":
-        definition = json.loads(definition_path.read_text())
-        ref = definition.get("reference", "")
-        if not ref:
-            sys.exit("Error: No reference field in definition.json")
 
-        if language in PYTHON_LIKE:
-            # Extract reference from definition.json as starting point
-            (kernel_dest / "kernel.py").write_text(ref)
-        else:
-            # Copy stub templates for compiled languages (cuda, cpp)
-            stubs_dir = PARENT_DIR / "templates" / "stubs" / language
-            if not stubs_dir.is_dir():
-                sys.exit(f"Error: No stub templates for language '{language}' at {stubs_dir}")
-            for stub_file in stubs_dir.iterdir():
-                if stub_file.is_file():
-                    shutil.copy2(stub_file, kernel_dest / stub_file.name)
-    else:
-        kp = Path(kernel_path)
-        # Python-like languages: rename to kernel.py (matches entry_point)
-        # Compiled languages: keep original name (may have multiple files)
-        if language in PYTHON_LIKE:
-            shutil.copy2(kp, kernel_dest / "kernel.py")
-        else:
-            binding = kp.parent / "binding.py"
-            if not binding.is_file():
-                sys.exit(
-                    f"Error: No binding.py found alongside {kp.resolve()}\n"
-                    f"Compiled languages (cuda/cpp) require a binding.py with the entry point.\n"
-                    f"Expected: {binding.resolve()}"
-                )
-            shutil.copy2(kp, kernel_dest / kp.name)
-            shutil.copy2(binding, kernel_dest / "binding.py")
-        # If config.toml colocated with kernel, use it
-        colocated_config = kp.parent / "config.toml"
-        if colocated_config.is_file():
-            shutil.copy2(colocated_config, child_dir / "config.toml")
-            print(f"Note: Using config.toml from {colocated_config.resolve()}")
-
-
-def init_git(child_dir, operator, mode, backend, language):
+def init_git(child_dir, operator, mode, backend):
     """Initialize git repo in child directory. Skips gracefully if git is unavailable."""
     if not shutil.which("git"):
         print("Warning: git not found, skipping repository initialization.", file=sys.stderr)
         return
 
     try:
-        msg = f"Initial commit (spawned from kernel-opt-agent, operator={operator}, mode={mode}, backend={backend}, language={language})"
+        msg = f"Initial commit (spawned from kernel-opt-agent, operator={operator}, mode={mode}, backend={backend})"
         subprocess.run(["git", "init", "-q"], cwd=child_dir, check=True)
         # Set repo-local user config so commit works without global git config
         subprocess.run(["git", "config", "user.name", "kernel-opt-agent"], cwd=child_dir, check=True)
@@ -333,10 +342,6 @@ def init_git(child_dir, operator, mode, backend, language):
 
 def main():
     args = parse_args()
-
-    # Resolve language
-    language = args.language
-    language_name = LANGUAGE_NAMES[language]
 
     # Resolve GPU
     gpu, gpu_name = resolve_gpu(args.gpu, args.backend)
@@ -371,7 +376,7 @@ def main():
 
     # Validate
     if args.mode == "existing":
-        validate_existing_mode(args.kernel, language)
+        validate_existing_mode(args.kernel)
 
     # Generate template context
     ctx = generate_context(definition_path, workloads_path)
@@ -380,26 +385,13 @@ def main():
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     backend_content = read_fragment(fragments_dir / f"backend-{args.backend}.md")
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
-
-    # Generate starting point text based on language category
-    if language in PYTHON_LIKE:
-        starting_point = f"The reference implementation is in `solution/{language}/kernel.py`"
-    else:
-        ext = {"cuda": ".cu", "cpp": ".cpp"}.get(language, "")
-        kernel_file = f"kernel{ext}" if ext else "kernel source"
-        starting_point = (
-            f"Stub files `{kernel_file}` and `binding.py` are in `solution/{language}/`. "
-            "Study the `reference` field in `docs/definition.json` to understand the operator semantics."
-        )
+    language_guide = read_fragment(fragments_dir / "language-guide.md")
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
-        "{{LANGUAGE_NAME}}": language_name,
-        "{{LANGUAGE}}": language,
         "{{GPU_NAME}}": gpu_name,
         "{{OPERATOR_DESCRIPTION}}": ctx["operator_description"],
         "{{OPERATOR}}": operator,
-        "{{STARTING_POINT}}": starting_point,
     }
     objective = objective_raw
     for key, val in inline_vars.items():
@@ -409,13 +401,12 @@ def main():
     placeholders = {
         "{{OBJECTIVE}}": objective,
         "{{BACKEND}}": backend_content,
+        "{{LANGUAGE_GUIDE}}": language_guide,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],
         "{{OPERATOR}}": operator,
         "{{OPERATOR_DESCRIPTION}}": ctx["operator_description"],
         "{{NUM_WORKLOADS}}": ctx["num_workloads"],
-        "{{LANGUAGE}}": language,
-        "{{LANGUAGE_NAME}}": language_name,
         "{{GPU_NAME}}": gpu_name,
     }
 
@@ -429,7 +420,6 @@ def main():
     # Populate child environment
     populate_child(
         child_dir,
-        language=language,
         operator=operator,
         gpu=gpu,
         mode=args.mode,
@@ -449,7 +439,7 @@ def main():
     (child_dir / task_filename).write_text(rendered)
 
     # Git init
-    init_git(child_dir, operator, args.mode, args.backend, language)
+    init_git(child_dir, operator, args.mode, args.backend)
 
     # Summary
     print()
@@ -458,7 +448,6 @@ def main():
     print(f"  Operator: {operator}")
     print(f"  Mode:     {args.mode}")
     print(f"  Backend:  {args.backend}")
-    print(f"  Language: {language}")
     print(f"  GPU:      {gpu_name}")
     print(f"  Dataset:  {dataset_path}")
     if args.mode == "existing":

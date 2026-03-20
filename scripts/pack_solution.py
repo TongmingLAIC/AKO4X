@@ -54,8 +54,8 @@ def pack_solution(output_path: Path = None) -> Path:
     language = build_config["language"]
     entry_point = build_config["entry_point"]
 
-    # Determine source directory based on language
-    source_dir = PROJECT_ROOT / "solution" / language
+    # Determine source directory (flat solution/)
+    source_dir = PROJECT_ROOT / "solution"
 
     if not source_dir.exists():
         raise FileNotFoundError(f"Source directory not found: {source_dir}")

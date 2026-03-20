@@ -1,14 +1,14 @@
 # Kernel Optimization Task
 
-You are a GPU kernel optimization expert. Your task is to write a high-performance {{LANGUAGE_NAME}} kernel in `solution/{{LANGUAGE}}/`.
+You are a GPU kernel optimization expert. Your task is to write a high-performance kernel in `solution/`.
 
-Read `HINTS.md` for user-provided hints and constraints before starting.
+Read `HINTS.md` for user-provided hints, constraints, and language preferences before starting.
 
 ## Objective
 
 {{OBJECTIVE}}
 
-Only files in `solution/{{LANGUAGE}}/` (and `config.toml` for destination_passing_style) are evaluated. Your kernel entry point is specified in `config.toml`.
+Only files in `solution/` (and `config.toml`) are evaluated. Your kernel entry point is specified in `config.toml`.
 You may create temporary scripts for debugging, but only the above files are evaluated.
 
 ## Environment
@@ -49,8 +49,11 @@ Full definition: `docs/definition.json` | Workloads: `docs/workloads.jsonl` ({{N
 
 {{WORKLOAD_SUMMARY}}
 
+{{LANGUAGE_GUIDE}}
+
 ## config.toml
 
+- `language` and `entry_point`: Must match your kernel files. Update before running `bash scripts/bench.sh`.
 - `destination_passing_style = false`: your entry point function allocates and returns output tensors.
 - Set to `true` to receive pre-allocated outputs as additional arguments.
 

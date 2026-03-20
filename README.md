@@ -8,7 +8,7 @@ A tool for automated GPU kernel optimization using Code Agents (e.g. Claude Code
 # List available operators
 python setup.py
 
-# Create an optimization environment (local, auto-detect GPU, Triton, from scratch)
+# Create an optimization environment (local, auto-detect GPU, from scratch)
 python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64
 
 # Enter the child environment and start your code agent
@@ -24,7 +24,6 @@ python setup.py \
   [--dataset /path/to/dataset] \    # default: $FIB_DATASET_PATH
   [--mode scratch|existing] \       # default: scratch
   [--backend local|modal] \         # default: local
-  [--language python|triton|cuda|cpp|tilelang] \  # default: triton
   [--gpu <name>] \                  # local: auto-detected; modal: required
   [--agent claude] \                # default: claude
   [--kernel /path/to/kernel.py] \   # required for existing mode
@@ -46,6 +45,10 @@ python setup.py --operator gdn_decode_qk4_v8_d128_k_last --gpu h100
 python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
     --mode existing --kernel /path/to/kernel.py
 
+# From existing kernel directory (copies all files in directory to solution/)
+python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
+    --mode existing --kernel /path/to/kernel_dir/
+
 # Modal B200, from scratch (--gpu required for modal)
 python setup.py --operator moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048 \
     --backend modal --gpu b200 --name "moe_b200"
@@ -57,27 +60,48 @@ python setup.py --operator my_custom_op --dataset /path/to/my/traceset
 python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 \
     --task ./my_task.md --hints ./my_hints.md
 
-# CUDA kernel from scratch (creates stub templates)
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language cuda
-
-# TileLang kernel (requires `pip install tilelang` in fi-bench env)
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language tilelang
-
-# CuTe DSL kernel (requires `pip install nvidia-cutlass-dsl`; use --language python)
-python setup.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --language python
-
 # Legacy flag aliases still work (--prompt → --task, --info → --hints)
 python setup.py --operator my_op --prompt ./my_task.md --info ./my_hints.md
 ```
 
-### Existing Mode Behavior
+### Language Selection
 
-When using `--mode existing --kernel /path/to/your_kernel.py`:
+The child environment is **language-agnostic**. The agent chooses the kernel language at runtime and updates `config.toml` accordingly.
 
-- **Python-like languages** (python/triton/tilelang): Your kernel is renamed to `kernel.py` to match the entry point
-- **Compiled languages** (cuda/cpp): Your kernel keeps its original filename (e.g., `best_cuda_kernel.cu`)
+To guide the agent toward a specific language, use `HINTS.md`:
 
-If a `config.toml` exists in the same directory as your kernel, it will be copied to the child environment (useful for pre-configuring `destination_passing_style`).
+```bash
+# Create environment, then edit HINTS.md before launching the agent
+python setup.py --operator my_op
+cd ../kernel-opt-agent-run-*/
+echo "Use Triton for this kernel." >> HINTS.md
+claude
+
+# Or provide a hints file at setup time
+echo "Write the kernel in CUDA." > my_hints.md
+python setup.py --operator my_op --hints my_hints.md
+```
+
+The agent can write kernels in Python/PyTorch, Triton, TileLang, CuTe DSL, CUDA, or C++. See the Language Guide section in the generated `CLAUDE.md` for details on each language.
+
+### Existing Mode
+
+When using `--mode existing --kernel /path/to/kernel`:
+
+- **Single file**: `--kernel /path/to/kernel.py` copies the file plus siblings (`.py`, `.cu`, `.cpp`, `.h` files) to `solution/`
+- **Directory**: `--kernel /path/to/dir/` copies all files in the directory to `solution/`
+- **Colocated config.toml**: If a `config.toml` exists alongside the kernel, it is used directly (useful for pre-configured language/entry_point/DPS settings)
+- **Otherwise**: Language is inferred from file extension (`.cu`→cuda, `.cpp`→cpp, `.py`→python)
+
+### Language/Package Notes
+
+Some languages require extra packages in the `fi-bench` environment:
+
+- **TileLang**: `pip install tilelang` — without it, solutions report COMPILE_ERROR
+- **CuTe DSL**: `pip install nvidia-cutlass-dsl` — CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
+- **Triton**: Pre-installed with PyTorch, no extra installation needed
+
+**TVM FFI builder limitation (CUDA/C++):** The TVMFFIBuilder compiles `.cu`/`.cpp` files into a shared library but does not support linking external CUDA libraries (cuBLAS, cuDNN, etc.) — the `extra_ldflags` parameter is not passed to the underlying `tvm_ffi.cpp.build()`. To use these libraries, load them at runtime via `dlopen`/`dlsym` from within the `.cu` file.
 
 ## How It Works
 
@@ -92,16 +116,13 @@ If a `config.toml` exists in the same directory as your kernel, it will be copie
 kernel-opt-agent-run-NNN/
 ├── CLAUDE.md                   # Auto-generated task spec (operator details + instructions)
 ├── HINTS.md                    # User-editable hints and constraints
-├── config.toml                 # Operator configuration
+├── config.toml                 # Operator configuration (agent updates language/entry_point)
 ├── .gitignore
 ├── docs/
 │   ├── definition.json         # Operator definition
-│   ├── workloads.jsonl         # Benchmark workloads
-├── solution/
-│   ├── triton/kernel.py        # Triton/Python/TileLang (entry: kernel.py::run)
-│   └── cuda/                   # CUDA (entry: binding.py::kernel)
-│       ├── kernel.cu           #   - CUDA kernel implementation
-│       └── binding.py          #   - Python bindings (TVM FFI)
+│   └── workloads.jsonl         # Benchmark workloads
+├── solution/                   # Flat directory — agent puts kernel files here
+│   └── kernel.py               # Starting point (reference implementation in scratch mode)
 ├── scripts/
 │   ├── bench_utils.py          # Shared benchmark utilities
 │   ├── bench.sh                # Benchmark script
@@ -112,31 +133,6 @@ kernel-opt-agent-run-NNN/
 └── .claude/
     └── settings.local.json     # Permission fallback
 ```
-
-### Entry Points by Language
-
-The entry point depends on the kernel language:
-
-- **Python, Triton, TileLang**: `solution/{language}/kernel.py::run`
-  - Agent edits a single Python file
-  - Entry function is `run(...)`
-
-- **CUDA**: `solution/cuda/binding.py::kernel`
-  - Agent edits `kernel.cu` (CUDA kernel code) and `binding.py` (Python bindings using TVM FFI)
-  - Entry function is `kernel(...)` in binding.py
-
-- **C++**: `solution/cpp/binding.py::kernel`
-  - Agent edits C++ source files and `binding.py` (Python bindings using TVM FFI)
-  - Entry function is `kernel(...)` in binding.py
-
-**Note for compiled languages (CUDA, C++):** The PyTorch reference implementation is in the `reference` field of `docs/definition.json`. Study it to understand the computation semantics before implementing the compiled kernel.
-
-**Note on additional packages:** Some languages require extra packages in the `fi-bench` environment:
-- **TileLang**: `pip install tilelang` — without it, solutions report COMPILE_ERROR
-- **CuTe DSL**: `pip install nvidia-cutlass-dsl` — use `--language python` since CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
-- **Triton**: Pre-installed with PyTorch, no extra installation needed
-
-**TVM FFI builder limitation:** The TVMFFIBuilder compiles `.cu`/`.cpp` files into a shared library but does not support linking external CUDA libraries (cuBLAS, cuDNN, etc.) — the `extra_ldflags` parameter is not passed to the underlying `tvm_ffi.cpp.build()`. To use these libraries, load them at runtime via `dlopen`/`dlsym` from within the `.cu` file. The default entry point for compiled languages is `binding.py::kernel`; alternatively, you can use `kernel.cu::symbol_name` with `TVM_FFI_DLL_EXPORT_TYPED_FUNC(symbol_name, function)` to export the function directly.
 
 ## Customization
 
@@ -150,7 +146,7 @@ python setup.py --operator my_op --task ./my_task.md
 
 ### Custom Hints
 
-`HINTS.md` is placed in each child environment for ad-hoc hints. Override the template with `--hints`:
+`HINTS.md` is placed in each child environment for ad-hoc hints (including language preferences). Override the template with `--hints`:
 
 ```bash
 python setup.py --operator my_op --hints ./my_analysis.md

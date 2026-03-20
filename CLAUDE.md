@@ -6,7 +6,9 @@ It is NOT an optimization environment itself — use `setup.py` to create one.
 ## Repository Purpose
 
 Provides scaffolding to create child environments where a Code Agent (e.g. Claude Code)
-autonomously optimizes a GPU kernel (Python, Triton, CUDA, C++, or TileLang), using the flashinfer-bench SDK for evaluation.
+autonomously optimizes a GPU kernel, using the flashinfer-bench SDK for evaluation.
+The child environment is **language-agnostic** — the agent decides the kernel language at runtime
+and updates `config.toml` accordingly.
 
 Supports any flashinfer-bench compatible dataset, including user-defined operators.
 
@@ -25,15 +27,9 @@ kernel-opt-agent/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
+│   │   ├── language-guide.md          # Comprehensive language reference for agents
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
-│   ├── stubs/
-│   │   ├── cuda/                      # Stub templates for CUDA scratch mode
-│   │   │   ├── kernel.cu
-│   │   │   └── binding.py
-│   │   └── cpp/                       # Stub templates for C++ scratch mode
-│   │       ├── kernel.cpp
-│   │       └── binding.py
 │   └── agent/
 │       └── claude.json                # Claude Code agent config (output filenames + permissions)
 └── scripts/
@@ -46,41 +42,47 @@ kernel-opt-agent/
     └── pack_solution.py               # Pack kernel for evaluation
 ```
 
-## Language Categories
+## Language-Agnostic Design
 
-The system distinguishes two language categories that behave differently:
+Child environments are created without a fixed language. The agent chooses the language at runtime:
 
-### Python-like Languages (python, triton, tilelang)
-- **Entry point**: `kernel.py::run`
-- **Scratch mode**: Reference from definition.json is extracted directly to `solution/{language}/kernel.py`
-- **Existing mode**: User kernel is renamed to `kernel.py` (matches entry point)
-- **Validation**: In existing mode, checks for `def run(` in the kernel file
+- **Scratch mode**: The PyTorch reference is extracted to `solution/kernel.py`. The agent can optimize
+  in-place (Python/Triton) or rewrite in any supported language (CUDA, C++, TileLang, CuTe DSL).
+- **Existing mode**: User-provided kernel files are copied to `solution/`. Language is inferred from
+  file extensions for the initial `config.toml`, but the agent can change it.
+- **config.toml**: Contains `language`, `entry_point`, and `destination_passing_style` fields that the
+  agent updates to match its kernel files before benchmarking.
+- **Language guide**: `templates/fragments/language-guide.md` is embedded in the task file and provides
+  comprehensive patterns for all supported languages (Python, Triton, TileLang, CuTe DSL, CUDA, C++).
 
-### Compiled Languages (cuda, cpp)
-- **Entry point**: `binding.py::kernel` (Python bindings using TVM FFI)
-- **Scratch mode**:
-  - Stub templates copied to `solution/{language}/` (kernel.cu + binding.py for CUDA)
-- **Existing mode**: User kernel keeps original filename (may have multiple files)
-- **Validation**: No `def run(` check (bindings are in Python but kernel logic is compiled)
+### Supported Languages and Entry Points
 
-This distinction is defined in `setup.py` as:
-```python
-PYTHON_LIKE = {"python", "triton", "tilelang"}
-```
+| Language | Files in `solution/` | config.toml `language` | config.toml `entry_point` |
+|----------|---------------------|----------------------|--------------------------|
+| Python / PyTorch | `kernel.py` | `python` | `kernel.py::run` |
+| Triton | `kernel.py` | `triton` | `kernel.py::run` |
+| TileLang | `kernel.py` | `tilelang` | `kernel.py::run` |
+| CuTe DSL | `kernel.py` | `python` | `kernel.py::run` |
+| CUDA | `kernel.cu` + `binding.py` | `cuda` | `binding.py::kernel` |
+| C++ | `kernel.cpp` + `binding.py` | `cpp` | `binding.py::kernel` |
+
+For compiled languages (CUDA, C++), `binding.py` uses TVM FFI (`from tvm.ffi import register_func`)
+to expose compiled code to Python. Alternatively, use `kernel.cu::symbol_name` with
+`TVM_FFI_DLL_EXPORT_TYPED_FUNC` to export the function directly.
 
 ### Additional Package Requirements
 
 Some languages require extra packages to be installed in the `fi-bench` conda environment:
 
 - **tilelang**: Requires `pip install tilelang`. Without it, `TileLangBuilder` is not registered and all workloads report COMPILE_ERROR.
-- **CuTe DSL** (NVIDIA CUTLASS Python DSL): Requires `pip install nvidia-cutlass-dsl`. Use `--language python` — CuTe DSL kernels are defined in Python via `@CuTeDSL.kernel` / `@CuTeDSL.jit` decorators and compiled at runtime to PTX. Torch tensors are passed to CuTe DSL via `cutlass.cute.runtime.from_dlpack()`.
+- **CuTe DSL** (NVIDIA CUTLASS Python DSL): Requires `pip install nvidia-cutlass-dsl`. CuTe DSL kernels are defined in Python via `@CuTeDSL.kernel` / `@CuTeDSL.jit` decorators and compiled at runtime to PTX. Torch tensors are passed to CuTe DSL via `cutlass.cute.runtime.from_dlpack()`.
 - **triton**: Pre-installed with PyTorch, no extra installation needed.
 
 ## How setup.py Works
 
-1. Parses `--operator`, `--mode`, `--backend`, `--language`, `--gpu`, `--agent`, `--kernel`, `--name`, `--dataset`, `--task`, `--hints`
+1. Parses `--operator`, `--mode`, `--backend`, `--gpu`, `--agent`, `--kernel`, `--name`, `--dataset`, `--task`, `--hints`
 2. If `--operator` not provided, lists available operators from the dataset and exits
-3. Derives `LANGUAGE_NAME` from `--language` (python→Python, triton→Triton, cuda→CUDA, cpp→C++, tilelang→TileLang) and resolves GPU (auto-detect for local, required for modal)
+3. Resolves GPU (auto-detect for local, required for modal)
 4. Reads agent config from `templates/agent/{agent}.json`:
    - `task_filename`: Name of the generated task file (e.g., "CLAUDE.md")
    - `hints_filename`: Name of the hints file (e.g., "HINTS.md")
@@ -89,17 +91,14 @@ Some languages require extra packages to be installed in the `fi-bench` conda en
 6. Calls `generate_context()` to extract template variables (shapes, workload summary, etc.)
 7. Creates `kernel-opt-agent-run-{label}/` (with `--name`) or `kernel-opt-agent-run-{YYYYMMDD_HHMMSS}/`
 8. Copies definition.json and workloads.jsonl from the dataset
-9. Auto-generates `config.toml` with operator name, language, GPU, and default build settings
+9. Auto-generates `config.toml` with operator name, GPU, and agent-editable fields (language, entry_point, dps) at the bottom
 10. Copies backend-specific bench script and runner (`run_local.py` or `run_modal.py`)
 11. Generates `.claude/settings.local.json` from agent config permissions
-12. **Extracts or prepares kernel code**:
-    - **Scratch mode, Python-like languages**: Extracts reference from definition.json → `solution/{language}/kernel.py`
-    - **Scratch mode, compiled languages**:
-      - Copies stub templates from `templates/stubs/{language}/` → `solution/{language}/`
-    - **Existing mode, Python-like languages**: Copies user kernel, renames to `kernel.py`
-    - **Existing mode, compiled languages**: Copies user kernel, preserves original filename
+12. **Populates `solution/` directory**:
+    - **Scratch mode**: Extracts reference from definition.json → `solution/kernel.py`
+    - **Existing mode**: Copies user kernel file(s) to `solution/`; if colocated `config.toml` exists, uses it; otherwise infers language from file extension
 13. Copies hints file (from `--hints` or `templates/hints.md`) as `HINTS.md`
-14. Assembles task file from `task.md` + fragment placeholders -> output filename from agent config
+14. Assembles task file from `task.md` + fragments (including language-guide.md) → output filename from agent config
 15. Initializes a git repo in the child directory
 
 ## Template Placeholders
@@ -108,22 +107,21 @@ Templates use these placeholders (replaced at spawn time):
 
 | Placeholder | Source | Example |
 |-------------|--------|---------|
-| `{{LANGUAGE}}` | `--language` flag (default: triton) | `triton`, `cuda`, `cpp` |
-| `{{LANGUAGE_NAME}}` | derived from `--language` | `Triton`, `CUDA`, `C++` |
 | `{{GPU_NAME}}` | `uppercase(--gpu)` | `A100`, `H100` |
 | `{{BACKEND}}` | `fragments/backend-{backend}.md` content | (execution instructions) |
 | `{{OBJECTIVE}}` | `fragments/objective-{mode}.md` content | (multi-line) |
+| `{{LANGUAGE_GUIDE}}` | `fragments/language-guide.md` content | (comprehensive language reference) |
 | `{{OPERATOR}}` | definition name | `dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64` |
 | `{{OPERATOR_DESCRIPTION}}` | first sentence of definition description | `Batched Native Sparse Attention (DSA)...` |
 | `{{NUM_WORKLOADS}}` | count of workloads | `23` |
 | `{{SHAPE_SUMMARY}}` | auto-formatted input/output shapes | `Key shapes: ...` |
 | `{{WORKLOAD_SUMMARY}}` | distribution of variable axes | `Workloads: num_tokens in {1(x1),...}` |
-| `{{STARTING_POINT}}` | language-dependent starting point description | `The reference implementation is in...` |
 
 ## How to Modify Templates
 
 - **Task template**: Edit `templates/task.md` — the main template assembled into the child's task file
 - **Objective fragments**: Edit `templates/fragments/objective-scratch.md` or `objective-existing.md`
+- **Language guide**: Edit `templates/fragments/language-guide.md` — comprehensive language reference embedded in task file
 - **Backend execution instructions**: Edit `templates/fragments/backend-local.md` or `backend-modal.md`
 - **Agent config**: Edit `templates/agent/claude.json` (output filenames + permissions)
 - **Hints template**: Edit `templates/hints.md`
@@ -141,22 +139,12 @@ The benchmark system caches reference implementation performance on the first ru
 
 ## Key Constraints
 
-- Agents only edit files in `solution/{language}/` (and optionally `config.toml`)
-- `config.toml`: `destination_passing_style = false` by default
+- Agents only edit files in `solution/` (and `config.toml`)
+- `config.toml`: `destination_passing_style = false` by default; agent updates `language` and `entry_point` to match kernel files
 - Operator data (definition.json, workloads.jsonl, reference kernel) comes from the dataset at spawn time, not from static files in this repo
 - Benchmark scripts hardcode conda environment name `fi-bench` (the `conda run -n fi-bench` line in `scripts/bench.sh` and `scripts/bench_modal.sh`)
 - Local benchmarking uses CUPTI profiling via `cupti-python` (**requires both `cupti-python >= 13.0.0` and CUDA 13.0+ driver**). If `cupti-python` is not installed or its version is < 13.0, the benchmark gracefully falls back to CUDA events. However, when `cupti-python >= 13.0` is installed but the **CUDA driver** is < 13.0, CUPTI calls fail at runtime with `NotSupportedError`, causing all workloads to report RUNTIME_ERROR. An upstream fix in flashinfer to catch this runtime failure is pending; until merged, ensure the CUDA driver is >= 13.0 when `cupti-python >= 13.0` is installed (or use Modal backend). CUPTI is strongly recommended for measurement accuracy — CUDA events fallback with low iteration counts (e.g. baseline's 20 iterations) can produce noisy results
 - **flashinfer-bench must be installed from source** (`pip install git+https://...@main`), not from PyPI. The PyPI release (v0.1.2) lags behind the main branch and may lack recent fixes (e.g. CUPTI fallback improvements, benchmark timing updates). The `cupti-python` package also defaults to a version < 13.0 on PyPI — run `pip install -U cupti-python` to get >= 13.0 for CUPTI support
-
-## Entry Point Conventions
-
-Entry points vary by language (configured in config.toml `entry_point` field):
-
-- **python, triton, tilelang**: `"kernel.py::run"` — single Python file with `run()` function
-- **cuda**: `"binding.py::kernel"` — Python bindings file with `kernel()` function calling CUDA kernel
-- **cpp**: `"binding.py::kernel"` — Python bindings file with `kernel()` function calling C++ code
-
-For compiled languages, the `binding.py` file uses TVM FFI (`from tvm.ffi import register_func`) to expose compiled code to Python.
 
 ## TVM FFI Builder Limitations
 

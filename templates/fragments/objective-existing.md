@@ -1,9 +1,9 @@
-Optimize the {{LANGUAGE_NAME}} kernel in `solution/{{LANGUAGE}}/` for maximum speedup on {{GPU_NAME}}.
+Optimize the kernel in `solution/` for maximum speedup on {{GPU_NAME}}.
 This is a **{{OPERATOR_DESCRIPTION}}**.
 
-The starting point is an **already partially-optimized {{LANGUAGE_NAME}} kernel**. Analyze it,
-identify bottlenecks, and optimize for maximum speedup while preserving correctness.
+Analyze the existing kernel, identify bottlenecks, and optimize.
+You may change language if beneficial — update `config.toml` accordingly.
 
-The pure-Python reference implementation is in `docs/definition.json` (under "reference"). Your kernel may be a different implementation approach.
+The pure-Python reference is in `docs/definition.json` (under "reference").
 
 **Recommended first step:** Run `bash scripts/bench.sh "baseline"` to establish current performance.

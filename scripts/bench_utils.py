@@ -412,8 +412,7 @@ def save_trajectory(
     run_dir.mkdir(parents=True)
 
     # Save all solution files and config.toml
-    language = get_language()
-    solution_dir = PROJECT_ROOT / "solution" / language
+    solution_dir = PROJECT_ROOT / "solution"
     if solution_dir.is_dir():
         for src_file in solution_dir.iterdir():
             if src_file.is_file():
