@@ -3,6 +3,23 @@
 NVIDIA Nsight Compute (NCU) profiles individual GPU kernels to reveal performance bottlenecks.
 Use it to guide optimization after identifying slow workloads with `bench.sh`.
 
+## When to Profile
+
+Don't profile routinely — profile when benchmark results alone don't explain performance. Get correctness first: all workloads must PASS before profiling is useful.
+
+**Profile when:**
+
+1. **Speedup has plateaued.** You made 2–3 optimization attempts with little or no improvement. Profiling reveals whether you are targeting the right bottleneck (memory vs compute vs launch overhead).
+2. **A workload group is disproportionately slow.** The per-group breakdown from `bench.sh` shows one group lagging behind others. Profile a representative workload from that group to understand what makes it different.
+3. **You need to choose between optimization strategies.** You suspect a kernel is memory-bound but aren't sure. Profiling confirms the bottleneck category so you invest effort in the right direction.
+4. **After a major architectural change.** New tiling scheme, different algorithm, or language switch — profile to understand the new performance characteristics before micro-optimizing.
+5. **Unexpected regression.** A change that should have improved performance made it worse. Profile before and after (see Workflow 4 below) to find what regressed.
+
+**Skip profiling when:**
+
+- The kernel isn't correct yet — fix FAILED workloads first.
+- You haven't read the bench output yet — per-workload and per-group breakdowns often tell you what to try next without profiling.
+
 ## Command Reference
 
 ```bash

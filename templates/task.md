@@ -56,7 +56,8 @@ This is the only command needed to benchmark — it compiles, checks correctness
 2. Study the operator spec in `docs/definition.json`
 3. Modify kernel → bench → if all PASS, commit → analyze → iterate
 4. Roll back on regression; check per-group breakdown to target weak workloads
-5. Stop when no further improvements found; summarize results
+5. When speedup stalls or a bottleneck is unclear, profile the slowest workloads
+6. Stop when no further improvements found; summarize results
 
 **Commit after each successful benchmark.** When all workloads PASS, commit with this format:
 
