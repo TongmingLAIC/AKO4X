@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=1.24.0",
     "cupti-python>=13.0.0",
     "apache-tvm-ffi>=0.1.6,!=0.1.8,!=0.1.8.post0,<0.2",
+    "flashinfer-python @ git+https://github.com/flashinfer-ai/flashinfer.git@main",
     "flashinfer-bench @ git+https://github.com/flashinfer-ai/flashinfer-bench.git@main",
     "torch-c-dlpack-ext",
     "cuda-python",
