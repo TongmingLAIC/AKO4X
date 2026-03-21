@@ -79,21 +79,25 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
 
 
 @app.local_entrypoint()
-def main(label: str = None, force_baseline: bool = False):
+def main(label: str = None, force_baseline: bool = False, quiet: bool = False):
     """Pack solution and run benchmark on Modal GPU, with trajectory tracking."""
     from scripts.bench_utils import run_and_report
     from scripts.pack_solution import pack_solution
 
-    print("Packing solution from source files...")
-    solution_path = pack_solution()
+    if not quiet:
+        print("Packing solution from source files...")
+    solution_path = pack_solution(quiet=quiet)
 
-    print("\nLoading solution...")
+    if not quiet:
+        print("\nLoading solution...")
     solution = Solution.model_validate_json(solution_path.read_text())
-    print(f"Loaded: {solution.name} ({solution.definition})")
+    if not quiet:
+        print(f"Loaded: {solution.name} ({solution.definition})")
 
     run_and_report(
         solution, run_benchmark.remote,
         force_baseline=force_baseline,
         label=label,
         backend=f"modal-{_GPU_TYPE.lower()}",
+        quiet=quiet,
     )

@@ -31,7 +31,7 @@ def load_config() -> dict:
         return tomllib.load(f)
 
 
-def pack_solution(output_path: Path = None) -> Path:
+def pack_solution(output_path: Path = None, quiet: bool = False) -> Path:
     """Pack solution files into a Solution JSON."""
     config = load_config()
 
@@ -83,11 +83,12 @@ def pack_solution(output_path: Path = None) -> Path:
         output_path = PROJECT_ROOT / "solution.json"
 
     output_path.write_text(solution.model_dump_json(indent=2))
-    print(f"Solution packed: {output_path}")
-    print(f"  Name: {solution.name}")
-    print(f"  Definition: {solution.definition}")
-    print(f"  Author: {solution.author}")
-    print(f"  Language: {language}")
+    if not quiet:
+        print(f"Solution packed: {output_path}")
+        print(f"  Name: {solution.name}")
+        print(f"  Definition: {solution.definition}")
+        print(f"  Author: {solution.author}")
+        print(f"  Language: {language}")
 
     return output_path
 

@@ -53,6 +53,7 @@ Compiles, checks correctness, and measures latency automatically.
 - All {{NUM_WORKLOADS}} workloads must PASS.
 - Focus on reducing **latency** across workloads. Speedup over the reference is shown for tracking but is not your optimization target — the reference is a slow Python implementation whose timing is approximate.
 - Label runs: `bash scripts/bench.sh --label "description"` saves to `trajectory/`.
+- Quiet mode: `bash scripts/bench.sh -q` — only prints score and per-group summary.
 - Always use a timeout: `timeout 600 bash scripts/bench.sh`. If it times out (especially the first run profiling the reference), lower `baseline_iterations` in `config.toml` or trim redundant workloads — see `docs/benchmark.md`.
 
 Read `docs/benchmark.md` for baseline caching, scoring details, and measurement caveats.

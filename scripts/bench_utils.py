@@ -282,6 +282,7 @@ def run_and_report(
     force_baseline: bool = False,
     label: str = None,
     backend: str = "local",
+    quiet: bool = False,
 ):
     """Two-phase benchmark orchestration shared by local and modal runners.
 
@@ -298,7 +299,8 @@ def run_and_report(
 
     if baseline is None:
         # Phase 1: Benchmark the reference implementation to measure its latency
-        print("\nProfiling reference baseline...")
+        if not quiet:
+            print("\nProfiling reference baseline...")
         ref_solution = pack_reference_as_solution()
         baseline_results = run_fn(ref_solution, make_config(BASELINE_ITERATIONS))
         if not baseline_results:
@@ -311,8 +313,9 @@ def run_and_report(
                   file=sys.stderr)
 
     # Phase 2: Benchmark the actual solution with high iterations
-    print("\nUsing cached reference baseline...")
-    print("Running benchmark...")
+    if not quiet:
+        print("\nUsing cached reference baseline...")
+        print("Running benchmark...")
     results = run_fn(solution, make_config(SOLUTION_ITERATIONS))
     if not results:
         print("No results returned!")
@@ -321,7 +324,7 @@ def run_and_report(
         results = inject_baseline(results, baseline)
 
     score = compute_score(results)
-    print_results(results, score)
+    print_results(results, score, quiet=quiet)
     save_trajectory(results, solution, score, label,
                     baseline_cached=baseline_was_cached, backend=backend)
 
@@ -418,28 +421,29 @@ def compute_score(results: dict) -> dict:
 # Output
 # ---------------------------------------------------------------------------
 
-def print_results(results: dict, score: dict = None):
+def print_results(results: dict, score: dict = None, quiet: bool = False):
     """Print benchmark results in a formatted way."""
-    for def_name, traces in results.items():
-        print(f"\n{def_name}:")
-        for workload_uuid, result in traces.items():
-            status = result.get("status")
-            print(f"  Workload {workload_uuid[:8]}...: {status}", end="")
+    if not quiet:
+        for def_name, traces in results.items():
+            print(f"\n{def_name}:")
+            for workload_uuid, result in traces.items():
+                status = result.get("status")
+                print(f"  Workload {workload_uuid[:8]}...: {status}", end="")
 
-            if result.get("latency_ms") is not None:
-                print(f" | {result['latency_ms']:.3f} ms", end="")
+                if result.get("latency_ms") is not None:
+                    print(f" | {result['latency_ms']:.3f} ms", end="")
 
-            if result.get("speedup_factor") is not None:
-                print(f" | {result['speedup_factor']:.2f}x speedup", end="")
+                if result.get("speedup_factor") is not None:
+                    print(f" | {result['speedup_factor']:.2f}x speedup", end="")
 
-            if result.get("max_abs_error") is not None:
-                abs_err = result["max_abs_error"]
-                rel_err = result.get("max_rel_error", 0)
-                abs_str = "NaN" if abs_err == "NaN" else f"{abs_err:.2e}"
-                rel_str = "NaN" if rel_err == "NaN" else f"{rel_err:.2e}"
-                print(f" | abs_err={abs_str}, rel_err={rel_str}", end="")
+                if result.get("max_abs_error") is not None:
+                    abs_err = result["max_abs_error"]
+                    rel_err = result.get("max_rel_error", 0)
+                    abs_str = "NaN" if abs_err == "NaN" else f"{abs_err:.2e}"
+                    rel_str = "NaN" if rel_err == "NaN" else f"{rel_err:.2e}"
+                    print(f" | abs_err={abs_str}, rel_err={rel_str}", end="")
 
-            print()
+                print()
 
     if score:
         print()

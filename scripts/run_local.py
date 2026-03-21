@@ -39,22 +39,28 @@ def main():
     parser.add_argument("--label", dest="label_flag", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--force-baseline", action="store_true",
                         help="Force re-profiling of reference baseline")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Only print score summary and per-group breakdown")
     args = parser.parse_args()
 
     label = args.label_flag or args.label
 
-    print("Packing solution from source files...")
-    solution_path = pack_solution()
+    if not args.quiet:
+        print("Packing solution from source files...")
+    solution_path = pack_solution(quiet=args.quiet)
 
-    print("\nLoading solution...")
+    if not args.quiet:
+        print("\nLoading solution...")
     solution = Solution.model_validate_json(solution_path.read_text())
-    print(f"Loaded: {solution.name} ({solution.definition})")
+    if not args.quiet:
+        print(f"Loaded: {solution.name} ({solution.definition})")
 
     run_and_report(
         solution, run_benchmark,
         force_baseline=args.force_baseline,
         label=label,
         backend="local",
+        quiet=args.quiet,
     )
 
 
