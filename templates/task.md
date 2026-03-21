@@ -18,6 +18,27 @@ Workloads: `docs/workloads.jsonl` ({{NUM_WORKLOADS}} total).
 
 {{WORKLOAD_SUMMARY}}
 
+## Language Reference
+
+| Language | Files in `solution/` | `config.toml` language | `config.toml` entry_point |
+|----------|---------------------|----------------------|--------------------------|
+| Python / PyTorch | `kernel.py` | `python` | `kernel.py::run` |
+| Triton | `kernel.py` | `triton` | `kernel.py::run` |
+| TileLang | `kernel.py` | `tilelang` | `kernel.py::run` |
+| CuTe DSL | `kernel.py` | `python` | `kernel.py::run` |
+| CUDA | `kernel.cu` + `binding.py` | `cuda` | `binding.py::kernel` |
+| C++ | `kernel.cpp` + `binding.py` | `cpp` | `binding.py::kernel` |
+
+When you choose a language, read the corresponding guide in `docs/languages/` for patterns, code examples, and constraints.
+
+## Configuration
+
+`config.toml` fields you control:
+
+- `language` and `entry_point`: Must match your kernel files (see Language Reference above).
+- `destination_passing_style`: `false` (default) = your function allocates and returns outputs. `true` = pre-allocated outputs are appended as extra arguments.
+- When switching languages, update both fields and remove old files from `solution/`.
+
 ## Benchmark
 
 GPU: {{GPU_NAME}}
@@ -40,16 +61,6 @@ This is the only command needed to benchmark — it compiles, checks correctness
 
 {{PROFILER_GUIDE}}
 
-{{LANGUAGE_GUIDE}}
-
-## Configuration
-
-`config.toml` fields you control:
-
-- `language` and `entry_point`: Must match your kernel files (see Quick Reference table above).
-- `destination_passing_style`: `false` (default) = your function allocates and returns outputs. `true` = pre-allocated outputs are appended as extra arguments.
-- When switching languages, update both fields and remove old files from `solution/`.
-
 ## Workflow
 
 1. `git log --oneline` to review optimization history (if resuming)
@@ -66,5 +77,3 @@ bench(<score>): <one-line description of what changed>
 
 Trajectory: <folder_name>
 ```
-
-Review `git log --oneline` before starting — it doubles as optimization history.

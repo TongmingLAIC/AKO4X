@@ -199,7 +199,7 @@ def render_template(task_text, placeholders):
     block_keys = {
         "{{OBJECTIVE}}", "{{BACKEND}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
-        "{{LANGUAGE_GUIDE}}", "{{PROFILER_GUIDE}}",
+        "{{PROFILER_GUIDE}}",
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
@@ -401,7 +401,6 @@ def main():
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     backend_content = read_fragment(fragments_dir / f"backend-{args.backend}.md")
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
-    language_guide = read_fragment(fragments_dir / "language-guide.md")
     profiler_guide = read_fragment(fragments_dir / "profiler-guide.md") if args.backend == "local" else ""
 
     # Pre-pass: substitute inline placeholders in objective fragment
@@ -419,7 +418,6 @@ def main():
         "{{OBJECTIVE}}": objective,
         "{{BACKEND}}": backend_content,
         "{{PROFILER_GUIDE}}": profiler_guide,
-        "{{LANGUAGE_GUIDE}}": language_guide,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],
         "{{OPERATOR}}": operator,

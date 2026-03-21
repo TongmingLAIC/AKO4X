@@ -43,7 +43,6 @@ AKO4FIB/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
-│   │   ├── language-guide.md          # Inline language reference (table + pointer)
 │   │   ├── profiler-guide.md          # Inline profiler summary (local backend only)
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
@@ -78,7 +77,7 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 |----------------|---------------|
 | Task template (main skeleton) | `templates/task.md` |
 | Objective text | `templates/fragments/objective-scratch.md` or `objective-existing.md` |
-| Language quick-reference | `templates/fragments/language-guide.md` |
+| Language quick-reference table | `templates/task.md` (inline, under `## Language Reference`) |
 | Language detail docs | `templates/languages/*.md` |
 | Profiler inline summary | `templates/fragments/profiler-guide.md` (local only) |
 | Profiler detail docs | `templates/profiler/ncu.md` |
@@ -104,7 +103,7 @@ Each agent type has a JSON config in `templates/agent/` (currently only `claude.
 ### Adding a New Language
 
 1. Create `templates/languages/{name}.md` with language-specific patterns and constraints
-2. Update `templates/fragments/language-guide.md` — add a row to the quick reference table
+2. Update the language table in `templates/task.md` (under `## Language Reference`)
 3. Update `infer_language()` in `spawn.py` if the file extension is new
 4. Update the language table in `docs/usage.md` and the features list in `README.md`
 5. No changes needed in bench scripts — flashinfer-bench handles compilation via its builder system
