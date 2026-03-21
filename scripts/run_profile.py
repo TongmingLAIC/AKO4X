@@ -6,7 +6,9 @@ Reuses pack_solution() to build Solution objects and the flashinfer-bench NCU ag
 """
 
 import argparse
+import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to path for imports
@@ -93,6 +95,24 @@ def run_ncu(args):
 
     result = flashinfer_bench_run_ncu(solution, workload, **kwargs)
     print(result)
+
+    # Auto-save profile output with metadata
+    profiles_dir = PROJECT_ROOT / "profiles"
+    profiles_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    profile_data = {
+        "timestamp": datetime.now().isoformat(),
+        "workload_index": args.workload_index,
+        "workload_uuid": workload.uuid,
+        "axes": dict(workload.axes),
+        "ncu_set": args.set,
+        "ncu_page": args.page,
+        "kernel_filter": args.kernel_name,
+        "output": result,
+    }
+    profile_path = profiles_dir / f"w{args.workload_index}_{timestamp}.json"
+    profile_path.write_text(json.dumps(profile_data, indent=2))
+    print(f"\nProfile saved to: {profile_path}", file=sys.stderr)
 
 
 def main():

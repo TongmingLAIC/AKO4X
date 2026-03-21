@@ -88,3 +88,4 @@ python scripts/run_profile.py <index> --max-lines 200
 - **NCU adds overhead**: Profiled execution is much slower than normal. This is expected — NCU replays kernels to collect metrics.
 - **One workload at a time**: Pick the most informative workload (usually the slowest from `bench.sh`).
 - **`--page raw` for scripting**: When you need to extract a specific metric value, use raw output and parse the result.
+- **Profiles are auto-saved**: Each run saves output and metadata to `profiles/w<index>_<timestamp>.json`. Compare two profiles by reading both files.
