@@ -7,6 +7,7 @@ Reuses pack_solution() to build Solution objects and the flashinfer-bench NCU ag
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,9 @@ def list_workloads():
 
 def run_ncu(args):
     """Run NCU profiler on a specific workload."""
+    # Isolate Triton JIT cache to this project
+    os.environ.setdefault("TRITON_CACHE_DIR", str(PROJECT_ROOT / ".triton_cache"))
+
     operator, traces = load_workloads()
 
     if args.workload_index < 0 or args.workload_index >= len(traces):

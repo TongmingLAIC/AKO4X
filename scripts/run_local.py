@@ -6,6 +6,7 @@ Caches reference baseline on first run for stable, efficient subsequent runs.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +45,9 @@ def main():
     args = parser.parse_args()
 
     label = args.label_flag or args.label
+
+    # Isolate Triton JIT cache to this project
+    os.environ.setdefault("TRITON_CACHE_DIR", str(PROJECT_ROOT / ".triton_cache"))
 
     if not args.quiet:
         print("Packing solution from source files...")

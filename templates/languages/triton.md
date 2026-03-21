@@ -28,6 +28,7 @@ def run(input, weight):
 - **See selected configs**: `TRITON_PRINT_AUTOTUNING=1 bash scripts/bench.sh` prints which config autotune picked for each kernel invocation.
 - **Variance from re-selection**: If benchmark scores fluctuate (>5%), check whether autotune is picking different configs across runs. If so, hardcode the best config and remove `@triton.autotune`.
 - **In-place / DPS kernels**: Autotune trials reuse the same input tensors. If the kernel writes in-place, earlier trials corrupt inputs for later ones — use `restore_value` on the affected pointer arguments.
+- **Stale compilation cache**: Benchmark and profiler use a project-local Triton cache (`.triton_cache/`). If you suspect stale compiled kernels, `rm -rf .triton_cache/` to force recompilation.
 
 ## Config
 
