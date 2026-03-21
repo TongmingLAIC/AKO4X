@@ -47,7 +47,7 @@ The primary metric is **mean speedup** across all workloads against the PyTorch 
 
 ## Features
 
-- **6 kernel languages**: Python/PyTorch, Triton, CUDA, C++, TileLang, CuTe DSL
+- **6 kernel languages**: Python/PyTorch, Triton, CUDA, C++, TileLang, CuTe DSL (Code Agent will automatically select the best language if not specified)
 - **2 backends**: Local GPU execution and [Modal](https://modal.com/) cloud
 - **NCU profiling**: Integrated NVIDIA Nsight Compute profiling (local backend)
 - **Baseline caching**: Automatic reference profiling with cached results
