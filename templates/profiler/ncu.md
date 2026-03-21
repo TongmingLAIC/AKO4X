@@ -24,34 +24,34 @@ Don't profile routinely — profile when benchmark results alone don't explain p
 
 ```bash
 # List workloads with indices
-bash scripts/profile.sh --list
+python scripts/run_profile.py --list
 
 # Profile a workload (detailed metrics, formatted output)
-bash scripts/profile.sh <index>
+python scripts/run_profile.py <index>
 
 # Full metrics collection (slower, more data)
-bash scripts/profile.sh <index> --set full
+python scripts/run_profile.py <index> --set full
 
 # Raw machine-readable output (for parsing)
-bash scripts/profile.sh <index> --page raw
+python scripts/run_profile.py <index> --page raw
 
 # Source-correlated counters (maps metrics to source lines)
-bash scripts/profile.sh <index> --page source
+python scripts/run_profile.py <index> --page source
 
 # Filter by kernel name (full-match regex; use .*name.* for substring)
-bash scripts/profile.sh <index> --kernel-name "my_kernel"
+python scripts/run_profile.py <index> --kernel-name "my_kernel"
 
 # Combine options
-bash scripts/profile.sh <index> --set full --page raw --kernel-name ".*gemm.*"
+python scripts/run_profile.py <index> --set full --page raw --kernel-name ".*gemm.*"
 
 # List available NCU sets and sections
-bash scripts/profile.sh --ncu-options
+python scripts/run_profile.py --ncu-options
 
 # Increase timeout for complex kernels (default: 60s)
-bash scripts/profile.sh <index> --timeout 120
+python scripts/run_profile.py <index> --timeout 120
 
 # Limit output length
-bash scripts/profile.sh <index> --max-lines 200
+python scripts/run_profile.py <index> --max-lines 200
 ```
 
 ### Options

@@ -3,9 +3,9 @@
 Profile individual workloads with NVIDIA Nsight Compute (NCU) to identify bottlenecks:
 
 ```bash
-bash scripts/profile.sh --list              # list workloads with indices
-bash scripts/profile.sh <index>             # NCU profile (detailed metrics)
-bash scripts/profile.sh <index> --page raw  # machine-readable output
+python scripts/run_profile.py --list              # list workloads with indices
+python scripts/run_profile.py <index>             # NCU profile (detailed metrics)
+python scripts/run_profile.py <index> --page raw  # machine-readable output
 ```
 
 Don't profile every iteration — reach for NCU when speedup stalls, a workload group is unexpectedly slow, or you need to confirm whether a kernel is memory-bound vs compute-bound.

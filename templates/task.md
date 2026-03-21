@@ -32,7 +32,7 @@ This is the only command needed to benchmark — it compiles, checks correctness
 - **speedup_factor** = reference_latency / your_latency. Higher is better.
 - First run profiles the reference and caches to `baseline.json`. Subsequent runs use the cache with higher iteration count.
 - Use `--force-baseline` to re-profile: `bash scripts/bench.sh --force-baseline`
-- Label runs for tracking: `bash scripts/bench.sh "description"` saves to `trajectory/YYYYMMDD_HHMMSS_description/`.
+- Label runs for tracking: `bash scripts/bench.sh --label "description"` saves to `trajectory/YYYYMMDD_HHMMSS_description/`.
 
 **Score = mean speedup across all {{NUM_WORKLOADS}} workloads.** All must PASS for a valid score.
 

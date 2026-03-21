@@ -54,12 +54,9 @@ AKO4FIB/
 └── scripts/
     ├── generate_context.py            # Extracts operator metadata for template rendering
     ├── bench_utils.py                 # Shared benchmark utilities (baseline caching, scoring)
-    ├── bench.sh                       # Local benchmark script
-    ├── bench_modal.sh                 # Modal benchmark script
-    ├── profile.sh                     # Local NCU profiler script
-    ├── run_profile.py                 # NCU profiler runner (local only)
     ├── run_local.py                   # Local benchmark runner
     ├── run_modal.py                   # Modal benchmark runner
+    ├── run_profile.py                 # NCU profiler runner (local only)
     └── pack_solution.py               # Pack kernel for evaluation
 ```
 
@@ -89,7 +86,7 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |
 | config.toml defaults | `populate_child()` in `spawn.py` (inline string) |
-| Benchmark scripts | `scripts/bench.sh`, `scripts/bench_modal.sh`, etc. |
+| Benchmark runners | `scripts/run_local.py`, `scripts/run_modal.py` |
 | User-facing docs | `docs/*.md` |
 
 ## Agent Config System
@@ -102,8 +99,7 @@ Each agent type has a JSON config in `templates/agent/` (currently only `claude.
 
 1. Create `templates/fragments/backend-{name}.md` with execution instructions
 2. Create `scripts/run_{name}.py` implementing the benchmark runner
-3. Create `scripts/bench_{name}.sh` wrapper script
-4. Update `spawn.py`: add to `--backend` choices in `parse_args()`, add copy logic in `populate_child()`
+3. Update `spawn.py`: add to `--backend` choices in `parse_args()`, add bench.sh generation and copy logic in `populate_child()`
 
 ### Adding a New Language
 

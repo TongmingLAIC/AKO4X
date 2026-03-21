@@ -21,8 +21,7 @@ ako4fib-run-<label or timestamp>/
 │   ├── bench_utils.py          # Shared benchmark utilities
 │   ├── bench.sh                # Benchmark script
 │   ├── run_local.py            # (or run_modal.py) Benchmark runner
-│   ├── profile.sh              # NCU profiler script (local only)
-│   ├── run_profile.py          # NCU profiler runner (local only)
+│   ├── run_profile.py          # NCU profiler (local only)
 │   └── pack_solution.py        # Pack kernel for evaluation
 ├── baseline.json               # Auto-created, cached reference performance
 ├── trajectory/                 # Auto-created, each run saves kernel snapshot + results.json
@@ -92,4 +91,4 @@ This allows both users and the agent to review or restore any previous attempt.
 
 ## Profiling (Local Backend)
 
-NCU profiling is available via `scripts/profile.sh` in the child environment. See `docs/profiler/ncu.md` within the child environment for detailed usage.
+NCU profiling is available via `python scripts/run_profile.py` in the child environment. See `docs/profiler/ncu.md` within the child environment for detailed usage.

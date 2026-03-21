@@ -318,16 +318,19 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
         )
         config_path.write_text(config_toml)
 
-    # Copy backend-specific scripts
+    # Generate backend-specific bench.sh and copy runner scripts
     if backend == "local":
-        shutil.copy2(PARENT_DIR / "scripts" / "bench.sh", child_dir / "scripts" / "bench.sh")
+        bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local.py "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_local.py", child_dir / "scripts" / "run_local.py")
-        shutil.copy2(PARENT_DIR / "scripts" / "profile.sh", child_dir / "scripts" / "profile.sh")
         shutil.copy2(PARENT_DIR / "scripts" / "run_profile.py", child_dir / "scripts" / "run_profile.py")
         shutil.copytree(PARENT_DIR / "templates" / "profiler", child_dir / "docs" / "profiler")
     else:
-        shutil.copy2(PARENT_DIR / "scripts" / "bench_modal.sh", child_dir / "scripts" / "bench.sh")
+        bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal.py "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
+
+    bench_sh_path = child_dir / "scripts" / "bench.sh"
+    bench_sh_path.write_text(bench_sh)
+    bench_sh_path.chmod(0o755)
 
     # Generate .claude/settings.local.json
     settings = {"permissions": agent_config["permissions"]}

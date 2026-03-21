@@ -35,10 +35,13 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig) -> dict:
 def main():
     """Pack solution and run benchmark."""
     parser = argparse.ArgumentParser(description="Run benchmark with optional trajectory tracking")
-    parser.add_argument("--label", type=str, default=None, help="Optional label for trajectory tracking")
+    parser.add_argument("label", nargs="?", default=None, help="Optional label for trajectory tracking")
+    parser.add_argument("--label", dest="label_flag", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--force-baseline", action="store_true",
                         help="Force re-profiling of reference baseline")
     args = parser.parse_args()
+
+    label = args.label_flag or args.label
 
     print("Packing solution from source files...")
     solution_path = pack_solution()
@@ -50,7 +53,7 @@ def main():
     run_and_report(
         solution, run_benchmark,
         force_baseline=args.force_baseline,
-        label=args.label,
+        label=label,
         backend="local",
     )
 

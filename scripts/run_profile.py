@@ -100,12 +100,12 @@ def main():
         description="NCU profiler — profile a solution on a specific workload",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
-  bash scripts/profile.sh --list                         # list workloads
-  bash scripts/profile.sh 0                              # NCU profile workload 0
-  bash scripts/profile.sh 0 --set full --page raw        # full metrics, raw output
-  bash scripts/profile.sh 0 --page source                # source-correlated counters
-  bash scripts/profile.sh 0 --kernel-name "my_kernel"    # filter by kernel name
-  bash scripts/profile.sh --ncu-options                  # list available NCU sets/sections
+  python scripts/run_profile.py --list                         # list workloads
+  python scripts/run_profile.py 0                              # NCU profile workload 0
+  python scripts/run_profile.py 0 --set full --page raw        # full metrics, raw output
+  python scripts/run_profile.py 0 --page source                # source-correlated counters
+  python scripts/run_profile.py 0 --kernel-name "my_kernel"    # filter by kernel name
+  python scripts/run_profile.py --ncu-options                  # list available NCU sets/sections
 """,
     )
 
