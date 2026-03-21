@@ -266,8 +266,10 @@ def extract_results(result_trace_set, definition_name: str) -> dict:
                 entry["reference_latency_ms"] = trace.evaluation.performance.reference_latency_ms
                 entry["speedup_factor"] = trace.evaluation.performance.speedup_factor
             if trace.evaluation.correctness:
-                entry["max_abs_error"] = trace.evaluation.correctness.max_absolute_error
-                entry["max_rel_error"] = trace.evaluation.correctness.max_relative_error
+                max_abs = trace.evaluation.correctness.max_absolute_error
+                max_rel = trace.evaluation.correctness.max_relative_error
+                entry["max_abs_error"] = "NaN" if (max_abs is not None and math.isnan(max_abs)) else max_abs
+                entry["max_rel_error"] = "NaN" if (max_rel is not None and math.isnan(max_rel)) else max_rel
             results[definition_name][trace.workload.uuid] = entry
 
     return results
@@ -433,7 +435,9 @@ def print_results(results: dict, score: dict = None):
             if result.get("max_abs_error") is not None:
                 abs_err = result["max_abs_error"]
                 rel_err = result.get("max_rel_error", 0)
-                print(f" | abs_err={abs_err:.2e}, rel_err={rel_err:.2e}", end="")
+                abs_str = "NaN" if abs_err == "NaN" else f"{abs_err:.2e}"
+                rel_str = "NaN" if rel_err == "NaN" else f"{rel_err:.2e}"
+                print(f" | abs_err={abs_str}, rel_err={rel_str}", end="")
 
             print()
 
