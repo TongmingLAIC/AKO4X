@@ -47,15 +47,15 @@ GPU: {{GPU_NAME}}
 bash scripts/bench.sh
 ```
 
-This is the only command needed to benchmark — it compiles, checks correctness, and profiles automatically.
+Compiles, checks correctness, and measures latency automatically.
 
 - **PASSED** = correct output within tolerance. **FAILED** = incorrect or crash.
-- **speedup_factor** = reference_latency / your_latency. Higher is better.
-- First run profiles the reference and caches to `baseline.json`. Subsequent runs use the cache with higher iteration count.
-- Use `--force-baseline` to re-profile: `bash scripts/bench.sh --force-baseline`
-- Label runs for tracking: `bash scripts/bench.sh --label "description"` saves to `trajectory/YYYYMMDD_HHMMSS_description/`.
+- All {{NUM_WORKLOADS}} workloads must PASS.
+- Focus on reducing **latency** across workloads. Speedup over the reference is shown for tracking but is not your optimization target — the reference is a slow Python implementation whose timing is approximate.
+- Label runs: `bash scripts/bench.sh --label "description"` saves to `trajectory/`.
+- Always use a timeout: `timeout 600 bash scripts/bench.sh`. If it times out (especially the first run profiling the reference), lower `baseline_iterations` in `config.toml` or trim redundant workloads — see `docs/benchmark.md`.
 
-**Score = mean speedup across all {{NUM_WORKLOADS}} workloads.** All must PASS for a valid score.
+Read `docs/benchmark.md` for baseline caching, scoring details, and measurement caveats.
 
 {{BACKEND}}
 

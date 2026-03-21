@@ -1,0 +1,49 @@
+# Benchmarking Reference
+
+## How Scoring Works
+
+**Score = arithmetic mean of speedup factors across all workloads.** Speedup = reference_latency / your_latency.
+
+The score is a **tracking metric**, not an optimization target. Because the reference is a pure Python/PyTorch implementation, absolute speedup values can range from 300x to 9000x+ depending on workload size — this is expected and does not indicate a problem. What matters is that your kernel's **latency** decreases across iterations.
+
+The score is still useful for tracking progress between runs because the reference latency is cached (see below), so speedup changes reflect real solution improvements.
+
+## Baseline Cache
+
+The first benchmark run profiles the reference implementation and saves results to `baseline.json`. Subsequent runs skip reference profiling and reuse the cache.
+
+- The cache is **automatically invalidated** when the workload set changes (UUIDs in `docs/workloads.jsonl` differ from cached ones).
+- To force re-profiling: `bash scripts/bench.sh --force-baseline`
+- Do not increase `baseline_iterations` to get a "better" baseline — the reference timing is approximate by design, and higher iteration counts can cause CUPTI measurement artifacts (see below).
+
+## Iteration Tuning
+
+The first benchmark run profiles the reference implementation, which can be very slow (pure Python on large workloads). Always use a timeout, especially on the first run:
+
+```bash
+timeout 600 bash scripts/bench.sh    # 10-minute timeout
+```
+
+Iteration counts are configured in the `[benchmark]` section of `config.toml`:
+
+```toml
+[benchmark]
+baseline_iterations = 5    # reference profiling iterations (keep low)
+solution_iterations = 100  # solution profiling iterations
+num_trials = 5             # trials per workload
+warmup_runs = 3            # warmup before measurement
+```
+
+- **`baseline_iterations`** is intentionally low (default 5). CUPTI's internal tracking state accumulates across iterations — high counts (50+) cause inflated latencies for heavy kernels (100+ CUDA ops per call). For very heavy operators, lower it further (minimum 1). The cached baseline only needs to be approximately correct.
+- **`solution_iterations`** can stay at 100. Optimized kernels launch few CUDA ops, so CUPTI state accumulation is negligible.
+- **Trim workloads** if benchmarking is still too slow: remove redundant entries from `docs/workloads.jsonl`. Workloads within the same group (same parameter values) are interchangeable — keeping fewer per group speeds up benchmarking without losing coverage.
+
+## Trajectory Tracking
+
+Each labeled run saves a snapshot to `trajectory/YYYYMMDD_HHMMSS_label/`:
+
+- All files from `solution/`
+- `config.toml`
+- `results.json` with full benchmark data (per-workload latencies, speedups, scores, metadata)
+
+Use `bash scripts/bench.sh --label "description"` to create labeled snapshots.

@@ -47,6 +47,7 @@ AKO4FIB/
 │   │   ├── backend-local.md           # Local execution instructions
 │   │   └── backend-modal.md           # Modal execution instructions
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
+│   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
 │   └── agent/
 │       └── claude.json                # Agent config (output filenames + permissions)
@@ -79,6 +80,7 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Objective text | `templates/fragments/objective-scratch.md` or `objective-existing.md` |
 | Language quick-reference table | `templates/task.md` (inline, under `## Language Reference`) |
 | Language detail docs | `templates/languages/*.md` |
+| Benchmark reference | `templates/benchmark.md` |
 | Profiler inline summary | `templates/fragments/profiler-guide.md` (local only) |
 | Profiler detail docs | `templates/profiler/ncu.md` |
 | Backend instructions | `templates/fragments/backend-local.md` or `backend-modal.md` |

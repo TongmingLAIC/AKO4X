@@ -239,6 +239,7 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     shutil.copy2(PARENT_DIR / "scripts" / "pack_solution.py", child_dir / "scripts" / "pack_solution.py")
     shutil.copy2(PARENT_DIR / "scripts" / "bench_utils.py", child_dir / "scripts" / "bench_utils.py")
     shutil.copytree(PARENT_DIR / "templates" / "languages", child_dir / "docs" / "languages")
+    shutil.copy2(PARENT_DIR / "templates" / "benchmark.md", child_dir / "docs" / "benchmark.md")
 
     # Copy hints file
     shutil.copy2(Path(hints_path), child_dir / hints_filename)
@@ -311,7 +312,7 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
             f'destination_passing_style = false\n'
             f'\n'
             f'[benchmark]\n'
-            f'baseline_iterations = 100\n'
+            f'baseline_iterations = 5\n'
             f'solution_iterations = 100\n'
             f'num_trials = 5\n'
             f'warmup_runs = 3\n'

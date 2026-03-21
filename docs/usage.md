@@ -83,15 +83,17 @@ Benchmark iteration counts are configured in the `[benchmark]` section of `confi
 
 ```toml
 [benchmark]
-baseline_iterations = 100   # reference profiling iterations
+baseline_iterations = 5     # reference profiling iterations (keep low)
 solution_iterations = 100   # solution profiling iterations
 num_trials = 5
 warmup_runs = 3
 ```
 
-CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `baseline_iterations` and `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
+CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
 
-> **Modal backend note**: On Modal, CUPTI activity tracing with high iteration counts on slow kernels (e.g. the PyTorch reference) can cause CUPTI buffer bloat, leading to inflated and inaccurate timings. If you observe this, lower `baseline_iterations` (e.g. to `20`) in `config.toml`. This issue does not affect local benchmarking.
+> **Note on `baseline_iterations`**: CUPTI's internal tracking state accumulates across iterations, causing later iterations to report inflated latencies for heavy kernels (those launching 100+ CUDA ops per call, such as PyTorch reference implementations). The default of 5 is intentionally low to avoid this. For very heavy operators (e.g. `gdn_decode_qk4_v8_d128_k_last`), even 5 iterations may be too many — lower it further if reference profiling is slow. This affects all backends, not just Modal.
+>
+> A low `baseline_iterations` does not hurt optimization workflow. The reference latency is cached in `baseline.json` after the first run, so subsequent runs reuse the same value. Even if the cached baseline is rough, it is **consistent** across runs — speedup changes between runs still reflect real solution improvements.
 
 ## Agent Permissions
 
