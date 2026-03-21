@@ -197,7 +197,7 @@ def render_template(task_text, placeholders):
     Inline placeholders are substituted within lines.
     """
     block_keys = {
-        "{{OBJECTIVE}}", "{{BACKEND}}",
+        "{{OBJECTIVE}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
         "{{PROFILER_GUIDE}}",
     }
@@ -400,7 +400,6 @@ def main():
 
     # Resolve fragments
     fragments_dir = PARENT_DIR / "templates" / "fragments"
-    backend_content = read_fragment(fragments_dir / f"backend-{args.backend}.md")
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
     profiler_guide = read_fragment(fragments_dir / "profiler-guide.md") if args.backend == "local" else ""
 
@@ -417,7 +416,6 @@ def main():
     # Build full placeholder map
     placeholders = {
         "{{OBJECTIVE}}": objective,
-        "{{BACKEND}}": backend_content,
         "{{PROFILER_GUIDE}}": profiler_guide,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],

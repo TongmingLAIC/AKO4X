@@ -43,9 +43,7 @@ AKO4FIB/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
-│   │   ├── profiler-guide.md          # Inline profiler summary (local backend only)
-│   │   ├── backend-local.md           # Local execution instructions
-│   │   └── backend-modal.md           # Modal execution instructions
+│   │   └── profiler-guide.md          # Inline profiler summary (local backend only)
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
 │   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
@@ -83,7 +81,6 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Benchmark reference | `templates/benchmark.md` |
 | Profiler inline summary | `templates/fragments/profiler-guide.md` (local only) |
 | Profiler detail docs | `templates/profiler/ncu.md` |
-| Backend instructions | `templates/fragments/backend-local.md` or `backend-modal.md` |
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |
 | config.toml defaults | `populate_child()` in `spawn.py` (inline string) |
