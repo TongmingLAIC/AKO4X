@@ -259,6 +259,7 @@ def extract_results(result_trace_set, definition_name: str) -> dict:
             entry = {
                 "status": trace.evaluation.status.value,
                 "solution": trace.solution,
+                "axes": dict(trace.workload.axes),
             }
             if trace.evaluation.performance:
                 entry["latency_ms"] = trace.evaluation.performance.latency_ms
@@ -370,7 +371,11 @@ def compute_score(results: dict) -> dict:
                 all_speedups.append(sf)
                 passed += 1
                 grp = uuid_to_group.get(uuid, "?")
-                by_group.setdefault(grp, []).append(sf)
+                by_group.setdefault(grp, {"speedups": [], "latencies": []})
+                by_group[grp]["speedups"].append(sf)
+                lat = result.get("latency_ms")
+                if lat is not None:
+                    by_group[grp]["latencies"].append(lat)
             else:
                 all_valid = False
                 if status == "FAILED":
@@ -381,7 +386,13 @@ def compute_score(results: dict) -> dict:
     if all_valid and all_speedups:
         final_score = sum(all_speedups) / len(all_speedups)
         if group_axis:
-            group_scores = {g: sum(sfs) / len(sfs) for g, sfs in sorted(by_group.items())}
+            group_scores = {
+                g: {
+                    "speedup": sum(d["speedups"]) / len(d["speedups"]),
+                    "latency_ms": sum(d["latencies"]) / len(d["latencies"]) if d["latencies"] else None,
+                }
+                for g, d in sorted(by_group.items())
+            }
         else:
             group_scores = {}
     else:
@@ -434,8 +445,13 @@ def print_results(results: dict, score: dict = None):
             print(f"  Passed: {score['passed']}/{score['total']} | Min: {score['min_speedup']:.2f}x | Max: {score['max_speedup']:.2f}x")
             if score.get("group_scores"):
                 group_axis = score.get("group_axis", "group")
-                group_str = "  ".join(f"{g}\u2192{avg:.2f}x" for g, avg in score["group_scores"].items())
-                print(f"  By {group_axis}:  {group_str}")
+                parts = []
+                for g, d in score["group_scores"].items():
+                    s = f"{g}\u2192{d['speedup']:.2f}x"
+                    if d.get("latency_ms") is not None:
+                        s += f"({d['latency_ms']:.3f}ms)"
+                    parts.append(s)
+                print(f"  By {group_axis}:  {'  '.join(parts)}")
         else:
             parts = []
             if score["failed"]:
