@@ -104,3 +104,18 @@ claude --dangerously-skip-permissions
 ```
 
 > **Warning**: This disables all safety confirmations. Only use in trusted, isolated environments.
+
+## Working with the Agent
+
+**Interrupt and guide.** You can interrupt the agent at any time to provide hints, suggest a different optimization strategy, or point it toward a specific bottleneck. The agent will incorporate your feedback and continue.
+
+**Resuming after the agent stops.** The agent may stop after several iterations when it believes it has exhausted its ideas. You have two options:
+
+- **Continue in the same environment**: send another prompt (e.g. "Keep optimizing, try a different approach"). The git history and trajectory are preserved.
+- **Spawn a new `existing` environment**: use `--mode existing --kernel /path/to/solution/` to start a fresh environment from the current kernel. This gives the agent a clean slate without prior optimization history.
+
+**Longer sessions.** By default the agent decides when to stop. To request more iterations upfront, include it in your initial prompt:
+
+```
+Read CLAUDE.md and optimize the kernel. Iterate at least 20 rounds.
+```
