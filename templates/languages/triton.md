@@ -23,6 +23,12 @@ def run(input, weight):
     return output
 ```
 
+## Autotune Tips
+
+- **See selected configs**: `TRITON_PRINT_AUTOTUNING=1 bash scripts/bench.sh` prints which config autotune picked for each kernel invocation.
+- **Variance from re-selection**: If benchmark scores fluctuate (>5%), check whether autotune is picking different configs across runs. If so, hardcode the best config and remove `@triton.autotune`.
+- **In-place / DPS kernels**: Autotune trials reuse the same input tensors. If the kernel writes in-place, earlier trials corrupt inputs for later ones — use `restore_value` on the affected pointer arguments.
+
 ## Config
 
 - `config.toml` language: `triton`
