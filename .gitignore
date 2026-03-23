@@ -17,3 +17,6 @@ venv/
 Thumbs.db
 *.swp
 *~
+
+# Claude Code
+.claude/

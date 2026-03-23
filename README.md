@@ -79,4 +79,4 @@ Check [open issues](../../issues) for specific tasks, or open a new one to discu
 
 ## License
 
-License information will be added before the first public release.
+This project is licensed under the [MIT License](LICENSE).
