@@ -6,7 +6,11 @@ A tool for automated GPU kernel optimization using Code Agents (e.g. Claude Code
 
 ```bash
 pip install .
+```
 
+> **CUDA Driver >= 13.0 required** — `pip install .` includes `cupti-python`, which needs a CUDA 13.0+ driver. With older drivers, benchmarks will fail with `RUNTIME_ERROR` instead of falling back gracefully. Check with `nvidia-smi`. See [Installation](docs/installation.md#prerequisites) for details.
+
+```bash
 # Download a dataset (LFS pointers only — tensors are fetched on demand)
 GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace
 # Or the MLSys 2026 Contest subset: https://huggingface.co/datasets/flashinfer-ai/mlsys26-contest

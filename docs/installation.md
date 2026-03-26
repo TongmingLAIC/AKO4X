@@ -3,8 +3,10 @@
 ## Prerequisites
 
 - **NVIDIA GPU**: CUDA-capable GPU (A100, H100, B200, etc.)
-- **CUDA Driver**: 13.0+ recommended for CUPTI profiling (see [Troubleshooting](troubleshooting.md) for fallback behavior)
+- **CUDA Driver**: >= 13.0 **required** (check with `nvidia-smi`)
 - **Python**: 3.10–3.13 (3.12 recommended)
+
+> **Warning**: `pip install .` automatically installs `cupti-python >= 13.0`, which requires a CUDA 13.0+ driver. If your driver is older, benchmarks will **not** fall back gracefully — all workloads will report `RUNTIME_ERROR`. Either upgrade your driver or use the Modal backend (`--backend modal`). See [Troubleshooting](troubleshooting.md#cupti-driver-mismatch) for details.
 
 ## Installation
 
