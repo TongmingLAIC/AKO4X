@@ -43,9 +43,9 @@ See [Usage Guide](docs/usage.md) for all spawn.py options, modes, and language s
 
 3. **Run the agent** — Launch `claude` in the child environment and send your initial prompt. The agent reads its task spec which contains the operator definition, workload distribution, and optimization instructions. You can also provide additional direction in your initial prompt
 
-4. **Iterate** — The agent writes or modifies the kernel, benchmarks it, analyzes per-workload results, and iterates toward higher speedup. Each benchmark run is automatically saved to `trajectory/` with the kernel snapshot and scores, so no progress is lost
+4. **Iterate** — The agent writes or modifies the kernel, benchmarks it, analyzes per-workload results, and iterates to reduce latency. Each benchmark run is automatically saved to `trajectory/` with the kernel snapshot and scores, so no progress is lost
 
-The primary metric is **mean speedup** across all workloads against the PyTorch reference. See [Child Environment](docs/child-environment.md) for the full directory structure, config.toml options, and profiling.
+The optimization target is **latency** — speedup over the PyTorch reference is shown for tracking but the reference is approximate. See [Child Environment](docs/child-environment.md) for the full directory structure, config.toml options, and profiling.
 
 ## Features
 
