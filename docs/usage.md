@@ -77,7 +77,45 @@ Some languages require extra packages:
 
 Per-language documentation is available in `docs/languages/` within each child environment.
 
-## Benchmark Tuning
+## Benchmarking
+
+Run benchmarks from the child environment:
+
+```bash
+bash scripts/bench.sh "label"
+```
+
+Output shows per-workload results and a final score:
+
+```
+operator_name:
+  Workload 0c23b10...: PASSED | 0.492 ms | 4.17x speedup | abs_err=1.2e-03, rel_err=2.1e-04
+  ...
+
+══════════════════════════════════════════════════
+  FINAL SCORE (mean speedup): 4.17x
+  Passed: 23/23 | Min: 2.10x | Max: 8.34x
+  By num_tokens:  1→4.17x  2→3.85x  ...
+══════════════════════════════════════════════════
+```
+
+The `FINAL SCORE` (mean speedup across all workloads) is the primary metric. All workloads must PASS for a valid score.
+
+### Baseline Caching
+
+The first benchmark run profiles the reference implementation and caches the result to `baseline.json`. Subsequent runs skip reference profiling.
+
+```bash
+bash scripts/bench.sh --force-baseline    # Force re-profile reference
+```
+
+`baseline.json` auto-invalidates when workloads change.
+
+### Trajectory Tracking
+
+Each labeled run saves a snapshot to `trajectory/<timestamp_label>/`, containing all files from `solution/`, `config.toml`, and `results.json` with per-workload scores and metadata.
+
+### Iteration Tuning
 
 Benchmark iteration counts are configured in the `[benchmark]` section of `config.toml` in the child environment:
 

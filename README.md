@@ -49,7 +49,7 @@ See [Usage Guide](docs/usage.md) for all spawn.py options, modes, and language s
 
 4. **Iterate** — The agent writes or modifies the kernel, benchmarks it, analyzes per-workload results, and iterates to reduce latency. Each benchmark run is automatically saved to `trajectory/` with the kernel snapshot and scores, so no progress is lost
 
-The optimization target is **latency** — speedup over the PyTorch reference is shown for tracking but the reference is approximate. See [Child Environment](docs/child-environment.md) for the full directory structure, config.toml options, and profiling.
+The optimization target is **latency** — speedup over the PyTorch reference is shown for tracking but the reference is approximate. See [Child Environment](docs/child-environment.md) for the directory structure and config.toml reference, and [Usage Guide](docs/usage.md#benchmarking) for benchmarking and profiling.
 
 ## Features
 

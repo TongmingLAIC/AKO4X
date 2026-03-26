@@ -34,7 +34,7 @@ AKO4FIB/
 ├── docs/                              # User-facing documentation
 │   ├── installation.md                # Prerequisites, installation, Modal setup
 │   ├── usage.md                       # spawn.py options, modes, language selection
-│   ├── child-environment.md           # Structure, config.toml, benchmarking, profiling
+│   ├── child-environment.md           # Structure, config.toml reference
 │   └── troubleshooting.md             # CUPTI, TVM FFI, version issues
 ├── templates/
 │   ├── task.md                        # Main task template (assembled into child's CLAUDE.md)

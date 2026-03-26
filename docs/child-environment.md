@@ -39,56 +39,9 @@ The agent updates these fields to match its kernel files:
 
 The `[benchmark]` section controls iteration counts:
 
-- **`baseline_iterations`**: Reference profiling iterations (default: `100`)
-- **`solution_iterations`**: Solution profiling iterations (default: `100`, higher for accuracy)
+- **`baseline_iterations`**: Reference profiling iterations (default: `5`)
+- **`solution_iterations`**: Solution profiling iterations (default: `100`)
 - **`num_trials`**: Number of trials per workload (default: `5`)
 - **`warmup_runs`**: Warmup runs before timing (default: `3`)
 
-## Benchmarking
-
-Run benchmarks from the child environment:
-
-```bash
-bash scripts/bench.sh "label"
-```
-
-Output shows per-workload results and a final score:
-
-```
-operator_name:
-  Workload 0c23b10...: PASSED | 0.492 ms | 4.17x speedup | abs_err=1.2e-03, rel_err=2.1e-04
-  ...
-
-══════════════════════════════════════════════════
-  FINAL SCORE (mean speedup): 4.17x
-  Passed: 23/23 | Min: 2.10x | Max: 8.34x
-  By num_tokens:  1→4.17x  2→3.85x  ...
-══════════════════════════════════════════════════
-```
-
-The `FINAL SCORE` (mean speedup across all workloads) is the primary metric. All workloads must PASS for a valid score.
-
-### Baseline Caching
-
-The first benchmark run profiles the reference implementation (20 iterations) and caches the result to `baseline.json`. Subsequent runs skip reference profiling and use higher iteration counts (100) for more accurate solution timing.
-
-```bash
-bash scripts/bench.sh "baseline"          # First run: profiles reference, caches baseline
-bash scripts/bench.sh "opt_v1"            # Uses cached baseline, 100 iterations for solution
-bash scripts/bench.sh --force-baseline    # Force re-profile reference
-```
-
-`baseline.json` auto-invalidates when workloads change.
-
-### Trajectory
-
-Each benchmark run automatically saves a snapshot to `trajectory/<timestamp_label>/`, containing:
-
-- All files from `solution/` and `config.toml` at the time of the run
-- `results.json` with per-workload scores, timestamps, and metadata
-
-This allows both users and the agent to review or restore any previous attempt.
-
-## Profiling (Local Backend)
-
-NCU profiling is available via `python scripts/run_profile.py` in the child environment. See `docs/profiler/ncu.md` within the child environment for detailed usage.
+For benchmarking commands, output interpretation, baseline caching, trajectory tracking, and iteration tuning, see [Usage Guide](usage.md#benchmarking).
