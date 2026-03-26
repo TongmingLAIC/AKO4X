@@ -33,6 +33,8 @@ claude
 # Send your initial prompt, e.g. "Optimize this kernel using Triton"
 ```
 
+See [Usage Guide](docs/usage.md) for all spawn.py options, modes, and language selection.
+
 ## How It Works
 
 1. **Spawn** — `spawn.py` discovers an operator from the dataset and creates an isolated child environment with task spec (`CLAUDE.md`), benchmark scripts, and reference kernel
@@ -43,7 +45,7 @@ claude
 
 4. **Iterate** — The agent writes or modifies the kernel, benchmarks it, analyzes per-workload results, and iterates toward higher speedup. Each benchmark run is automatically saved to `trajectory/` with the kernel snapshot and scores, so no progress is lost
 
-The primary metric is **mean speedup** across all workloads against the PyTorch reference.
+The primary metric is **mean speedup** across all workloads against the PyTorch reference. See [Child Environment](docs/child-environment.md) for the full directory structure, config.toml options, and profiling.
 
 ## Features
 
@@ -56,14 +58,9 @@ The primary metric is **mean speedup** across all workloads against the PyTorch 
 - **Custom datasets**: Any flashinfer-bench compatible trace set (see [Bring Your Own Kernel](https://bench.flashinfer.ai/docs/tutorials/bring-your-own-kernel)). You can also use the Code Agent to help create custom datasets.
 - **Two modes**: Write from scratch or optimize an existing kernel
 
-## Documentation
+## Troubleshooting
 
-| Guide | Description |
-|-------|-------------|
-| [Installation](docs/installation.md) | Prerequisites, installation, Modal setup |
-| [Usage Guide](docs/usage.md) | spawn.py options, modes, language selection |
-| [Child Environment](docs/child-environment.md) | Structure, config.toml, benchmarking, profiling |
-| [Troubleshooting](docs/troubleshooting.md) | CUPTI, TVM FFI, version issues |
+See [Troubleshooting](docs/troubleshooting.md) for solutions to CUPTI driver mismatches, flashinfer-bench version issues, and TVM FFI linking problems.
 
 ## Contributing
 
