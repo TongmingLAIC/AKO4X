@@ -241,8 +241,9 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     shutil.copytree(PARENT_DIR / "templates" / "languages", child_dir / "docs" / "languages")
     shutil.copy2(PARENT_DIR / "templates" / "benchmark.md", child_dir / "docs" / "benchmark.md")
 
-    # Copy hints file
+    # Copy hints and iterations template
     shutil.copy2(Path(hints_path), child_dir / hints_filename)
+    shutil.copy2(PARENT_DIR / "templates" / "iterations.md", child_dir / "ITERATIONS.md")
 
     # Determine language and entry_point for config.toml
     language = "python"

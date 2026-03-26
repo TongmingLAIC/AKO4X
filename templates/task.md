@@ -63,15 +63,11 @@ Read `docs/benchmark.md` for scoring, baseline caching, iteration tuning, and tr
 
 1. `git log --oneline` to review optimization history (if resuming)
 2. Study the operator spec in `docs/definition.json`
-3. Modify kernel → bench → if all PASS, commit → analyze → iterate
+3. **Iteration protocol** — every modification followed by a bench run is one iteration:
+   1. Modify kernel
+   2. `bash scripts/bench.sh --label "iter-N description"`
+   3. Update `ITERATIONS.md` (summary table row + detail entry)
+   4. Git commit: `bench(<score>): <one-line description>`
 4. Roll back on regression; check per-group breakdown to target weak workloads
 5. When speedup stalls or a bottleneck is unclear, profile the slowest workloads
 6. Stop when no further improvements found; summarize results
-
-**Commit after each successful benchmark.** When all workloads PASS, commit with this format:
-
-```
-bench(<score>): <one-line description of what changed>
-
-Trajectory: <folder_name>
-```
