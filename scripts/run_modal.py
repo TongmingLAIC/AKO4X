@@ -55,7 +55,8 @@ image = (
     .pip_install(*_pip_deps)
     .pip_install("flashinfer-bench @ https://github.com/flashinfer-ai/flashinfer-bench/archive/refs/heads/main.tar.gz")
     .pip_install("torch-c-dlpack-ext")
-    .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/bench_utils.py")
+    .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/project/scripts/bench_utils.py")
+    .add_local_file(str(PROJECT_ROOT / "config.toml"), "/root/project/config.toml")
 )
 
 
@@ -69,7 +70,7 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
 
     # Import bench_utils from the file copied into the image
     import sys as _sys
-    _sys.path.insert(0, "/root")
+    _sys.path.insert(0, "/root/project/scripts")
     from bench_utils import build_bench_trace_set, extract_results
 
     bench_trace_set = build_bench_trace_set(TRACE_SET_PATH, solution)
