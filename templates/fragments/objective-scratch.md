@@ -1,4 +1,1 @@
-Write a kernel that minimizes latency on {{GPU_NAME}}.
-This operator performs **{{OPERATOR_DESCRIPTION}}**.
-
-The reference implementation (Python/PyTorch) is provided in `solution/kernel.py` as your starting point.
+Write a high-performance kernel starting from the reference implementation in `solution/kernel.py`.
