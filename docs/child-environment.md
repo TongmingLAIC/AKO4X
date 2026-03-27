@@ -44,4 +44,4 @@ The `[benchmark]` section controls iteration counts:
 - **`num_trials`**: Number of trials per workload (default: `5`)
 - **`warmup_runs`**: Warmup runs before timing (default: `3`)
 
-For benchmarking commands, output interpretation, baseline caching, trajectory tracking, and iteration tuning, see [Usage Guide](usage.md#benchmarking).
+For benchmarking commands, output interpretation, baseline caching, trajectory tracking, and iteration tuning, see [Benchmarking](benchmarking.md).

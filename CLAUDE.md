@@ -34,6 +34,8 @@ AKO4FIB/
 ├── docs/                              # User-facing documentation
 │   ├── installation.md                # Prerequisites, installation, Modal setup
 │   ├── usage.md                       # spawn.py options, modes, language selection
+│   ├── benchmarking.md                # Benchmark commands, output, baseline, tuning
+│   ├── agent-guide.md                 # Agent permissions, collaboration tips, monitoring
 │   ├── child-environment.md           # Structure, config.toml reference
 │   └── troubleshooting.md             # CUPTI, TVM FFI, version issues
 ├── templates/
@@ -104,7 +106,7 @@ Each agent type has a JSON config in `templates/agent/` (currently only `claude.
 1. Create `templates/languages/{name}.md` with language-specific patterns and constraints
 2. Update the language table in `templates/task.md` (under `## Language Reference`)
 3. Update `infer_language()` in `spawn.py` if the file extension is new
-4. Update the language table in `docs/usage.md` and the features list in `README.md`
+4. Update the language table in `docs/usage.md`
 5. No changes needed in bench scripts — flashinfer-bench handles compilation via its builder system
 
 ### Adding a New Agent Type

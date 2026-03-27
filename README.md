@@ -1,34 +1,18 @@
 # AKO4FIB — Agentic Kernel Optimization for FlashInfer-Bench
 
-A tool for automated GPU kernel optimization using Code Agents (e.g. Claude Code). Built on the [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench) SDK, it supports any flashinfer-bench compatible dataset, including the official [FlashInfer-Trace](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace) and user-defined operators.
-
-## Quick Install
-
-```bash
-pip install .
-```
-
-> **CUDA Driver >= 13.0 required** — `pip install .` includes `cupti-python`, which needs a CUDA 13.0+ driver. With older drivers, benchmarks will fail with `RUNTIME_ERROR` instead of falling back gracefully. Check with `nvidia-smi`. See [Installation](docs/installation.md#prerequisites) for details.
-
-```bash
-# Download a dataset (LFS pointers only — tensors are fetched on demand)
-GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace
-# Or the MLSys 2026 Contest subset: https://huggingface.co/datasets/flashinfer-ai/mlsys26-contest
-
-export FIB_DATASET_PATH=/path/to/flashinfer-trace
-```
-
-See [Installation](docs/installation.md) for prerequisites, optional extras (Modal, TileLang, CuTe DSL), and verification steps.
+Give it an operator, get back a faster GPU kernel — automatically. AKO4FIB uses Code Agents (e.g. Claude Code) to write, benchmark, and iteratively optimize GPU kernels. Built on [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench).
 
 ## Quick Start
 
-> **Note**: Run all commands below — including `claude` — in the same Python environment where you installed AKO4FIB, so the agent can access all dependencies.
-
 ```bash
-# List available operators
-python spawn.py
+# Install
+pip install .
 
-# Create an optimization environment
+# Download a dataset (LFS pointers only — tensors are fetched on demand)
+GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace
+export FIB_DATASET_PATH=/path/to/flashinfer-trace
+
+# Spawn an optimization environment
 python spawn.py --operator dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64 --name my_run
 
 # Enter the child environment and start optimizing
@@ -37,40 +21,40 @@ claude
 # Send your initial prompt, e.g. "Optimize this kernel using Triton"
 ```
 
-See [Usage Guide](docs/usage.md) for all spawn.py options, modes, and language selection.
+> **CUDA Driver >= 13.0 required.** Check with `nvidia-smi`. See [Installation](docs/installation.md) for prerequisites, optional extras, and verification steps.
 
 ## How It Works
 
-1. **Spawn** — `spawn.py` discovers an operator from the dataset and creates an isolated child environment with task spec (`CLAUDE.md`), benchmark scripts, and reference kernel
-
-2. **Configure** (optional) — Edit `HINTS.md` in the child environment to provide guidance: language preference, optimization strategies, or constraints
-
-3. **Run the agent** — Launch `claude` in the child environment and send your initial prompt. The agent reads its task spec which contains the operator definition, workload distribution, and optimization instructions. You can also provide additional direction in your initial prompt
-
-4. **Iterate** — The agent writes or modifies the kernel, benchmarks it, analyzes per-workload results, and iterates to reduce latency. Each benchmark run is automatically saved to `trajectory/` with the kernel snapshot and scores, so no progress is lost
-
-The optimization target is **latency** — speedup over the PyTorch reference is shown for tracking but the reference is approximate. See [Child Environment](docs/child-environment.md) for the directory structure and config.toml reference, and [Usage Guide](docs/usage.md#benchmarking) for benchmarking and profiling.
+1. **Spawn** — `spawn.py` creates an isolated environment with the operator spec, benchmark scripts, and a reference kernel
+2. **Configure** (optional) — Edit `HINTS.md` to guide the agent: language preference, optimization strategies, constraints
+3. **Run** — Launch `claude` and send your initial prompt. The agent reads its task spec and begins optimizing
+4. **Iterate** — The agent modifies the kernel, benchmarks, analyzes results, and repeats until latency stops improving
 
 ## Features
 
-- **6 kernel languages**: Python/PyTorch, Triton, CUDA, C++, TileLang, CuTe DSL (Code Agent will automatically select the best language if not specified)
-- **2 backends**: Local GPU execution and [Modal](https://modal.com/) cloud
-- **NCU profiling**: Integrated NVIDIA Nsight Compute profiling (local backend)
-- **Baseline caching**: Automatic reference profiling with cached results
-- **Trajectory tracking**: Every benchmark run saves kernel snapshot and results for review
-- **Git integration**: Each child environment is a git repo; the agent commits progress automatically
-- **Custom datasets**: Any flashinfer-bench compatible trace set (see [Bring Your Own Kernel](https://bench.flashinfer.ai/docs/tutorials/bring-your-own-kernel)). You can also use the Code Agent to help create custom datasets.
-- **Two modes**: Write from scratch or optimize an existing kernel
+- **6 kernel languages**: Python/PyTorch, Triton, CUDA, C++, TileLang, CuTe DSL — the agent selects automatically or you choose via `HINTS.md`
+- **2 execution backends**: Local GPU or [Modal](https://modal.com/) cloud
+- **2 modes**: Write from scratch or optimize an existing kernel (`--mode existing`)
+- **NCU profiling**: Integrated NVIDIA Nsight Compute profiling for bottleneck analysis (local backend)
+- **Progress monitoring**: Track optimization via `ITERATIONS.md`, git history (`git log --oneline`), and per-run snapshots in `trajectory/`
+- **Custom datasets**: Any [flashinfer-bench compatible trace set](https://bench.flashinfer.ai/docs/tutorials/bring-your-own-kernel), including user-defined operators
 
-## Troubleshooting
+## Documentation
 
-See [Troubleshooting](docs/troubleshooting.md) for solutions to CUPTI driver mismatches, flashinfer-bench version issues, and TVM FFI linking problems.
+| Guide | What it covers |
+|-------|---------------|
+| [Installation](docs/installation.md) | Prerequisites, optional extras (Modal, TileLang, CuTe DSL), verification |
+| [Usage Guide](docs/usage.md) | spawn.py options, modes, language selection |
+| [Benchmarking](docs/benchmarking.md) | Benchmark commands, output interpretation, baseline caching, iteration tuning |
+| [Agent Guide](docs/agent-guide.md) | Agent permissions, collaboration tips, resuming and extending sessions |
+| [Child Environment](docs/child-environment.md) | Directory structure and config.toml reference |
+| [Troubleshooting](docs/troubleshooting.md) | CUPTI driver mismatches, flashinfer-bench versions, TVM FFI linking |
 
 ## Contributing
 
 We welcome contributions! For architecture details and development guidance, see [CLAUDE.md](CLAUDE.md).
 
-**Roadmap** — areas we'd like to develop with the community:
+**Roadmap:**
 
 - Support for more code agents beyond Claude Code (see [Adding a New Agent Type](CLAUDE.md#adding-a-new-agent-type))
 - Additional kernel languages and backends

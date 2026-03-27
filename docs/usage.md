@@ -58,7 +58,7 @@ When using `--mode existing --kernel /path/to/kernel`:
 The child environment supports multiple kernel languages. By default, the agent selects a language based on the operator characteristics, but you can guide this choice via `HINTS.md` or your initial prompt.
 
 ### Supported Languages
- 
+
 | Language | Files in `solution/` | config.toml `language` | config.toml `entry_point` |
 |----------|---------------------|----------------------|--------------------------|
 | Python / PyTorch | `kernel.py` | `python` | `kernel.py::run` |
@@ -76,86 +76,3 @@ Some languages require extra packages:
 - **CuTe DSL**: `pip install nvidia-cutlass-dsl` — CuTe DSL kernels are Python-defined (`@CuTeDSL.kernel` decorator) and compiled to PTX at runtime
 
 Per-language documentation is available in `docs/languages/` within each child environment.
-
-## Benchmarking
-
-Run benchmarks from the child environment:
-
-```bash
-bash scripts/bench.sh "label"
-```
-
-Output shows per-workload results and a final score:
-
-```
-operator_name:
-  Workload 0c23b10...: PASSED | 0.492 ms | 4.17x speedup | abs_err=1.2e-03, rel_err=2.1e-04
-  ...
-
-══════════════════════════════════════════════════
-  FINAL SCORE (mean speedup): 4.17x
-  Passed: 23/23 | Min: 2.10x | Max: 8.34x
-  By num_tokens:  1→4.17x  2→3.85x  ...
-══════════════════════════════════════════════════
-```
-
-The `FINAL SCORE` (mean speedup across all workloads) is the primary metric. All workloads must PASS for a valid score.
-
-### Baseline Caching
-
-The first benchmark run profiles the reference implementation and caches the result to `baseline.json`. Subsequent runs skip reference profiling.
-
-```bash
-bash scripts/bench.sh --force-baseline    # Force re-profile reference
-```
-
-`baseline.json` auto-invalidates when workloads change.
-
-### Trajectory Tracking
-
-Each labeled run saves a snapshot to `trajectory/<timestamp_label>/`, containing all files from `solution/`, `config.toml`, and `results.json` with per-workload scores and metadata.
-
-### Iteration Tuning
-
-Benchmark iteration counts are configured in the `[benchmark]` section of `config.toml` in the child environment:
-
-```toml
-[benchmark]
-baseline_iterations = 5     # reference profiling iterations (keep low)
-solution_iterations = 100   # solution profiling iterations
-num_trials = 5
-warmup_runs = 3
-```
-
-CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
-
-> **Note on `baseline_iterations`**: CUPTI's internal tracking state accumulates across iterations, causing later iterations to report inflated latencies for heavy kernels (those launching 100+ CUDA ops per call, such as PyTorch reference implementations). The default of 5 is intentionally low to avoid this. For very heavy operators (e.g. `gdn_decode_qk4_v8_d128_k_last`), even 5 iterations may be too many — lower it further if reference profiling is slow. This affects all backends, not just Modal.
->
-> A low `baseline_iterations` does not hurt optimization workflow. The reference latency is cached in `baseline.json` after the first run, so subsequent runs reuse the same value. Even if the cached baseline is rough, it is **consistent** across runs — speedup changes between runs still reflect real solution improvements.
-
-## Agent Permissions
-
-Each child environment includes `.claude/settings.local.json` which controls what tools the agent can use. By default, broad access is granted (file I/O, bash, web search, etc.). To restrict permissions, edit this file before launching the agent.
-
-For fully automated (unattended) runs, Claude Code supports skipping all permission prompts:
-
-```bash
-claude --dangerously-skip-permissions
-```
-
-> **Warning**: This disables all safety confirmations. Only use in trusted, isolated environments.
-
-## Working with the Agent
-
-**Interrupt and guide.** You can interrupt the agent at any time to provide hints, suggest a different optimization strategy, or point it toward a specific bottleneck. The agent will incorporate your feedback and continue.
-
-**Resuming after the agent stops.** The agent may stop after several iterations when it believes it has exhausted its ideas. You have two options:
-
-- **Continue in the same environment**: send another prompt (e.g. "Keep optimizing, try a different approach"). The git history and trajectory are preserved.
-- **Spawn a new `existing` environment**: use `--mode existing --kernel /path/to/solution/` to start a fresh environment from the current kernel. This gives the agent a clean slate without prior optimization history.
-
-**Longer sessions.** By default the agent decides when to stop. To request more iterations upfront, include it in your initial prompt:
-
-```
-Read CLAUDE.md and optimize the kernel. Iterate at least 20 rounds.
-```
