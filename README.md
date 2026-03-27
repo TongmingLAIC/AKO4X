@@ -1,6 +1,21 @@
 # AKO4FIB — Agentic Kernel Optimization for FlashInfer-Bench
 
-Give it an operator, get back a faster GPU kernel — automatically. AKO4FIB uses Code Agents (e.g. Claude Code) to write, benchmark, and iteratively optimize GPU kernels. Built on [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench).
+<p align="center">
+  <a href="https://tongminglaic.github.io/AKO"><img src="https://img.shields.io/badge/Project-Page-blue" alt="Project Page"></a>
+  <a href="https://github.com/TongmingLAIC/AKO4ALL"><img src="https://img.shields.io/badge/GitHub-AKO4ALL-blue?logo=github" alt="AKO4ALL"></a>
+  <img src="https://img.shields.io/badge/Tech%20Report-Coming%20Soon-gray" alt="Tech Report">
+</p>
+
+<p align="center"><b>If you find our work useful, please consider giving us a star 🌟</b></p>
+
+Agentic Kernel Optimization for FlashInfer-Bench — automated GPU kernel optimization powered by coding agents. Give it an operator, get back a faster GPU kernel. Built on [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench).
+
+> Looking for a flexible harness for any kernel on any hardware? Check out [AKO4ALL](https://github.com/TongmingLAIC/AKO4ALL).
+
+## News
+
+- **[2026.03.28]** AKO4FIB is now open source!
+- **[2026.03.24]** [AKO4ALL](https://github.com/TongmingLAIC/AKO4ALL) is released.
 
 ## Quick Start
 
@@ -49,6 +64,10 @@ claude
 | [Agent Guide](docs/agent-guide.md) | Agent permissions, collaboration tips, resuming and extending sessions |
 | [Child Environment](docs/child-environment.md) | Directory structure and config.toml reference |
 | [Troubleshooting](docs/troubleshooting.md) | CUPTI driver mismatches, flashinfer-bench versions, TVM FFI linking |
+
+## Tech Report
+
+Coming soon — our tech report will detail why we advocate agentic approaches over fixed-pipeline methods for GPU kernel optimization.
 
 ## Contributing
 
