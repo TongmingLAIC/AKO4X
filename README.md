@@ -14,8 +14,8 @@ Agentic Kernel Optimization for FlashInfer-Bench — automated GPU kernel optimi
 
 ## News
 
-- **[2026.03.28]** AKO4FIB is now open source!
-- **[2026.03.24]** [AKO4ALL](https://github.com/TongmingLAIC/AKO4ALL) is released.
+- 🎉 **[2026.03.28]** AKO4FIB is now open source!
+- 🚀 **[2026.03.24]** [AKO4ALL](https://github.com/TongmingLAIC/AKO4ALL) is released.
 
 ## Quick Start
 
@@ -80,6 +80,13 @@ We welcome contributions! For architecture details and development guidance, see
 - Unify `scratch`/`existing` modes — let the agent decide based on context
 
 Check [open issues](../../issues) for specific tasks, or open a new one to discuss your ideas.
+
+## Acknowledgments
+
+We would like to thank the following open-source projects that inspired and supported the development of AKO:
+
+- [FlashInfer](https://flashinfer.ai/) — for the LLM inference kernel library and the [flashinfer-bench](https://github.com/flashinfer-ai/flashinfer-bench) benchmark infrastructure on which AKO4FIB is built.
+- [autoresearch](https://github.com/karpathy/autoresearch) and [autokernel](https://github.com/RightNow-AI/autokernel) — AKO's design was inspired by their work on autonomous optimization loops.
 
 ## License
 
