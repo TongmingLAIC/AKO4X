@@ -67,7 +67,7 @@ claude
 
 ## Tech Report
 
-Coming soon — our tech report will detail why we advocate agentic approaches over fixed-pipeline methods for GPU kernel optimization.
+Coming soon — our tech report will detail why we advocate agentic approaches over fixed-pipeline methods for kernel optimization.
 
 ## Contributing
 
