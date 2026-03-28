@@ -1,4 +1,5 @@
-# AKO4FIB — Agentic Kernel Optimization for FlashInfer-Bench
+<h1 align="center">AKO4FIB</h1>
+<p align="center"><b>Agentic Kernel Optimization for FlashInfer-Bench</b></p>
 
 <p align="center">
   <a href="https://tongminglaic.github.io/AKO"><img src="https://img.shields.io/badge/Project-Page-blue" alt="Project Page"></a>
