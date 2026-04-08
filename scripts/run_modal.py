@@ -54,6 +54,7 @@ image = (
     _base_image
     .pip_install(*_pip_deps)
     .pip_install("flashinfer-bench @ https://github.com/flashinfer-ai/flashinfer-bench/archive/refs/heads/main.tar.gz")
+    .pip_install("flashinfer-python @ https://github.com/flashinfer-ai/flashinfer/archive/refs/heads/main.tar.gz")
     .pip_install("torch-c-dlpack-ext")
     .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/project/scripts/bench_utils.py")
     .add_local_file(str(PROJECT_ROOT / "config.toml"), "/root/project/config.toml")

@@ -26,6 +26,7 @@ except ImportError:
 # --- Project paths ---
 PROJECT_ROOT = Path(__file__).parent.parent
 BASELINE_PATH = PROJECT_ROOT / "baseline.json"
+EXPERT_BASELINE_PATH = PROJECT_ROOT / "expert_baseline.json"
 DEFINITION_PATH = PROJECT_ROOT / "docs" / "definition.json"
 WORKLOADS_PATH = PROJECT_ROOT / "docs" / "workloads.jsonl"
 
@@ -144,6 +145,14 @@ def load_baseline() -> dict | None:
         print("Baseline cache is stale (workloads changed), will re-profile.", file=sys.stderr)
         return None
 
+    # Source check: invalidate if baseline source changed (e.g. expert added/removed)
+    cached_source = baseline.get("source", "reference")
+    expected_source = _baseline_source()
+    if cached_source != expected_source:
+        print(f"Baseline source changed ({cached_source} → {expected_source}), will re-profile.",
+              file=sys.stderr)
+        return None
+
     return baseline
 
 
@@ -169,6 +178,7 @@ def save_baseline(results: dict):
 
     data = {
         "operator": operator,
+        "source": _baseline_source(),
         "benchmark_config": {
             "warmup_runs": WARMUP_RUNS,
             "iterations": BASELINE_ITERATIONS,
@@ -226,6 +236,28 @@ def make_baseline_config() -> BenchmarkConfig:
         warmup_runs=1,
         iterations=BASELINE_ITERATIONS,
         num_trials=1,
+        profile_baseline=False,
+    )
+
+
+def _baseline_source() -> str:
+    """Return expected baseline source based on whether expert solution exists."""
+    return "expert" if EXPERT_BASELINE_PATH.exists() else "reference"
+
+
+def load_expert_solution() -> Solution | None:
+    """Load expert baseline solution from expert_baseline.json if it exists."""
+    if not EXPERT_BASELINE_PATH.exists():
+        return None
+    return Solution.model_validate_json(EXPERT_BASELINE_PATH.read_text())
+
+
+def make_expert_baseline_config() -> BenchmarkConfig:
+    """High-iteration config for expert baseline (runs fast, needs accuracy)."""
+    return BenchmarkConfig(
+        warmup_runs=WARMUP_RUNS,
+        iterations=SOLUTION_ITERATIONS,
+        num_trials=NUM_TRIALS,
         profile_baseline=False,
     )
 
@@ -359,11 +391,17 @@ def run_and_report(
                             baseline_cached=False, backend=backend)
             return
 
-        # Phase 1: Benchmark the reference implementation to measure its latency
-        if not quiet:
-            print("\nProfiling reference baseline...")
-        ref_solution = pack_reference_as_solution()
-        baseline_results = run_fn(ref_solution, make_baseline_config())
+        # Phase 1: Benchmark baseline to measure its latency
+        expert = load_expert_solution()
+        if expert is not None:
+            if not quiet:
+                print(f"\nProfiling expert baseline ({expert.name})...")
+            baseline_results = run_fn(expert, make_expert_baseline_config())
+        else:
+            if not quiet:
+                print("\nProfiling reference baseline...")
+            ref_solution = pack_reference_as_solution()
+            baseline_results = run_fn(ref_solution, make_baseline_config())
         if not baseline_results:
             print("No results returned from baseline profiling!")
             return

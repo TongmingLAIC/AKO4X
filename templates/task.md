@@ -50,7 +50,7 @@ bash scripts/bench.sh
 Compiles, checks correctness, and measures latency automatically.
 
 - **PASSED** = correct output within tolerance. **FAILED** = incorrect or crash. All {{NUM_WORKLOADS}} workloads must PASS.
-- Focus on reducing **latency** across workloads. Speedup over the reference is shown for tracking but is not your optimization target — the reference is a slow Python implementation whose timing is approximate.
+- Focus on reducing **latency** across workloads. {{BASELINE_NOTE}}
 - `bash scripts/bench.sh --label "description"` — saves snapshot to `trajectory/`.
 - `bash scripts/bench.sh -q` — only prints score, per-group speedup, and latency.
 - `timeout 600 bash scripts/bench.sh` — use a timeout, especially on first run.

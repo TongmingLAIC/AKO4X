@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument("--kernel", default="")
     parser.add_argument("--name", default="", dest="label")
     parser.add_argument("--dataset", default="")
+    parser.add_argument("--baseline", default="", help="Path to expert baseline Solution JSON")
     return parser.parse_args()
 
 
@@ -149,6 +150,25 @@ def validate_existing_mode(kernel_path):
         sys.exit(f"Error: Kernel path not found: {kernel_path}")
 
 
+def discover_expert_baseline(dataset_path, operator, op_type, explicit_path=""):
+    """Find expert baseline solution JSON for the operator.
+
+    If explicit_path is provided, use it. Otherwise auto-discover from
+    {dataset}/solutions/baseline/*/{operator}/ (category names may differ
+    between definitions/ and solutions/).
+    """
+    if explicit_path:
+        p = Path(explicit_path)
+        if not p.is_file():
+            sys.exit(f"Error: Baseline not found: {explicit_path}")
+        return p
+    baseline_dir = dataset_path / "solutions" / "baseline"
+    if not baseline_dir.is_dir():
+        return None
+    matches = sorted(baseline_dir.glob(f"*/{operator}/*.json"))
+    return matches[0] if matches else None
+
+
 def infer_language(kernel_path):
     """Infer language from kernel file extension. Returns (language, entry_point)."""
     ext_map = {
@@ -203,7 +223,7 @@ def render_template(task_text, placeholders):
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
-        "{{NUM_WORKLOADS}}", "{{GPU_NAME}}",
+        "{{NUM_WORKLOADS}}", "{{GPU_NAME}}", "{{BASELINE_NOTE}}",
     ]
 
     lines = []
@@ -226,7 +246,8 @@ def render_template(task_text, placeholders):
 
 
 def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
-                   definition_path, workloads_path, dataset_path, agent_config, hints_path, hints_filename):
+                   definition_path, workloads_path, dataset_path, agent_config, hints_path, hints_filename,
+                   expert_baseline_path=None):
     """Create child directory structure and populate with files."""
     # Create directories — flat solution/ (no language subdirectory)
     for subdir in [".claude", "docs", "scripts", "solution"]:
@@ -289,6 +310,11 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
                 colocated = tomllib.load(f)
             language = colocated.get("build", {}).get("language", language)
             entry_point = colocated.get("build", {}).get("entry_point", entry_point)
+            # Ensure baseline_cache is present (appends under [benchmark], the last section)
+            if not colocated.get("benchmark", {}).get("baseline_cache"):
+                baseline_cache_dir = (PARENT_DIR.parent / "baselines").resolve()
+                with open(child_dir / "config.toml", "a") as f:
+                    f.write(f'baseline_cache = "{baseline_cache_dir}"\n')
         else:
             # Infer language from file extension
             language, entry_point = infer_language(kernel_path)
@@ -327,6 +353,10 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     if global_baseline.exists():
         shutil.copy2(global_baseline, child_dir / "baseline.json")
         print(f"Copied cached baseline from {global_baseline}")
+
+    # Copy expert baseline if available
+    if expert_baseline_path:
+        shutil.copy2(expert_baseline_path, child_dir / "expert_baseline.json")
 
     # Generate backend-specific bench.sh / profile.sh and copy runner scripts
     if backend == "local":
@@ -409,6 +439,11 @@ def main():
     if args.mode == "existing":
         validate_existing_mode(args.kernel)
 
+    # Discover expert baseline
+    expert_baseline = discover_expert_baseline(dataset_path, operator, op_type, args.baseline)
+    if expert_baseline:
+        print(f"Expert baseline: {expert_baseline}")
+
     # Generate template context
     ctx = generate_context(definition_path, workloads_path)
 
@@ -428,6 +463,13 @@ def main():
         objective = objective.replace(key, val)
 
     # Build full placeholder map
+    baseline_note = (
+        "Speedup is measured against the expert baseline — this is the competition metric. "
+        "A score >1.0x means you are beating the expert."
+    ) if expert_baseline else (
+        "Speedup over the reference is shown for tracking but is not your optimization target "
+        "— the reference is a slow Python implementation whose timing is approximate."
+    )
     placeholders = {
         "{{OBJECTIVE}}": objective,
         "{{PROFILER_GUIDE}}": profiler_guide,
@@ -437,6 +479,7 @@ def main():
         "{{OPERATOR_DESCRIPTION}}": ctx["operator_description"],
         "{{NUM_WORKLOADS}}": ctx["num_workloads"],
         "{{GPU_NAME}}": gpu_name,
+        "{{BASELINE_NOTE}}": baseline_note,
     }
 
     # Determine child directory name
@@ -460,6 +503,7 @@ def main():
         agent_config=agent_config,
         hints_path=hints_path,
         hints_filename=hints_filename,
+        expert_baseline_path=expert_baseline,
     )
 
     # Render and write task file
