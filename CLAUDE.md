@@ -45,7 +45,7 @@ AKO4FIB/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
-│   │   └── profiler-guide.md          # Inline profiler summary (local backend only)
+│   │   └── profiler-guide.md          # Inline profiler summary
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
 │   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
@@ -56,7 +56,8 @@ AKO4FIB/
     ├── bench_utils.py                 # Shared benchmark utilities (baseline caching, scoring)
     ├── run_local.py                   # Local benchmark runner
     ├── run_modal.py                   # Modal benchmark runner
-    ├── run_profile.py                 # NCU profiler runner (local only)
+    ├── run_local_profile.py           # NCU profiler runner (local backend)
+    ├── run_modal_profile.py           # NCU profiler runner (Modal backend)
     └── pack_solution.py               # Pack kernel for evaluation
 ```
 
@@ -81,7 +82,7 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Language quick-reference table | `templates/task.md` (inline, under `## Language Reference`) |
 | Language detail docs | `templates/languages/*.md` |
 | Benchmark reference | `templates/benchmark.md` |
-| Profiler inline summary | `templates/fragments/profiler-guide.md` (local only) |
+| Profiler inline summary | `templates/fragments/profiler-guide.md` |
 | Profiler detail docs | `templates/profiler/ncu.md` |
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |

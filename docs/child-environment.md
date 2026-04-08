@@ -14,14 +14,15 @@ ako4fib-run-<label or timestamp>/
 │   ├── definition.json         # Operator definition
 │   ├── workloads.jsonl         # Benchmark workloads
 │   ├── languages/              # Per-language patterns and constraints
-│   └── profiler/               # Profiler docs (local backend only)
+│   └── profiler/               # Profiler docs (NCU reference)
 ├── solution/                   # Flat directory — agent puts kernel files here
 │   └── kernel.py               # Starting point (reference implementation in scratch mode)
 ├── scripts/
 │   ├── bench_utils.py          # Shared benchmark utilities
-│   ├── bench.sh                # Benchmark script
+│   ├── bench.sh                # Benchmark wrapper (backend-agnostic)
+│   ├── profile.sh              # NCU profiler wrapper (backend-agnostic)
 │   ├── run_local.py            # (or run_modal.py) Benchmark runner
-│   ├── run_profile.py          # NCU profiler (local only)
+│   ├── run_local_profile.py    # (or run_modal_profile.py) NCU profiler runner
 │   └── pack_solution.py        # Pack kernel for evaluation
 ├── baseline.json               # Auto-created, cached reference performance
 ├── trajectory/                 # Auto-created, each run saves kernel snapshot + results.json

@@ -320,19 +320,24 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
         )
         config_path.write_text(config_toml)
 
-    # Generate backend-specific bench.sh and copy runner scripts
+    # Generate backend-specific bench.sh / profile.sh and copy runner scripts
     if backend == "local":
         bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local.py "$@"\n'
+        profile_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local_profile.py "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_local.py", child_dir / "scripts" / "run_local.py")
-        shutil.copy2(PARENT_DIR / "scripts" / "run_profile.py", child_dir / "scripts" / "run_profile.py")
-        shutil.copytree(PARENT_DIR / "templates" / "profiler", child_dir / "docs" / "profiler")
+        shutil.copy2(PARENT_DIR / "scripts" / "run_local_profile.py", child_dir / "scripts" / "run_local_profile.py")
     else:
         bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal.py "$@"\n'
+        profile_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal_profile.py -- "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
+        shutil.copy2(PARENT_DIR / "scripts" / "run_modal_profile.py", child_dir / "scripts" / "run_modal_profile.py")
 
-    bench_sh_path = child_dir / "scripts" / "bench.sh"
-    bench_sh_path.write_text(bench_sh)
-    bench_sh_path.chmod(0o755)
+    shutil.copytree(PARENT_DIR / "templates" / "profiler", child_dir / "docs" / "profiler")
+
+    for name, content in [("bench.sh", bench_sh), ("profile.sh", profile_sh)]:
+        p = child_dir / "scripts" / name
+        p.write_text(content)
+        p.chmod(0o755)
 
     # Generate .claude/settings.local.json
     settings = {"permissions": agent_config["permissions"]}
@@ -402,7 +407,7 @@ def main():
     # Resolve fragments
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
-    profiler_guide = read_fragment(fragments_dir / "profiler-guide.md") if args.backend == "local" else ""
+    profiler_guide = read_fragment(fragments_dir / "profiler-guide.md")
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
