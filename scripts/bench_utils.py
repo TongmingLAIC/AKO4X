@@ -49,6 +49,7 @@ def _load_benchmark_config() -> dict:
         "solution_iterations": bench.get("solution_iterations", 100),
         "num_trials": bench.get("num_trials", 5),
         "warmup_runs": bench.get("warmup_runs", 3),
+        "baseline_cache": bench.get("baseline_cache", ""),
     }
 
 
@@ -58,6 +59,7 @@ BASELINE_ITERATIONS = _bench_cfg["baseline_iterations"]
 SOLUTION_ITERATIONS = _bench_cfg["solution_iterations"]
 NUM_TRIALS = _bench_cfg["num_trials"]
 WARMUP_RUNS = _bench_cfg["warmup_runs"]
+BASELINE_CACHE = _bench_cfg["baseline_cache"]
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +179,13 @@ def save_baseline(results: dict):
     BASELINE_PATH.write_text(json.dumps(data, indent=2))
     print(f"Baseline cached to {BASELINE_PATH} ({len(workloads)} workloads)")
 
+    # Also save to global cache if configured
+    global_path = _get_global_baseline_path()
+    if global_path:
+        global_path.parent.mkdir(parents=True, exist_ok=True)
+        global_path.write_text(json.dumps(data, indent=2))
+        print(f"Baseline also cached globally to {global_path}")
+
 
 def inject_baseline(results: dict, baseline: dict) -> dict:
     """Replace reference_latency_ms=0.0 with cached values and recompute speedup_factor."""
@@ -205,6 +214,39 @@ def make_config(iterations: int) -> BenchmarkConfig:
         num_trials=NUM_TRIALS,
         profile_baseline=False,
     )
+
+
+def make_baseline_config() -> BenchmarkConfig:
+    """Create a lightweight BenchmarkConfig for baseline profiling.
+
+    Uses minimal warmup and trials since the baseline only needs to be
+    approximately correct — it is cached and reused across runs.
+    """
+    return BenchmarkConfig(
+        warmup_runs=1,
+        iterations=BASELINE_ITERATIONS,
+        num_trials=1,
+        profile_baseline=False,
+    )
+
+
+def _get_global_baseline_path() -> Path | None:
+    """Return path to global baseline cache, or None if not configured."""
+    if not BASELINE_CACHE:
+        return None
+    with open(DEFINITION_PATH) as f:
+        operator = json.load(f)["name"]
+    return Path(BASELINE_CACHE) / operator / "baseline.json"
+
+
+def _is_solution_reference() -> bool:
+    """Check if solution/kernel.py is identical to the reference implementation."""
+    with open(DEFINITION_PATH) as f:
+        ref_code = json.load(f).get("reference", "")
+    solution_path = PROJECT_ROOT / "solution" / "kernel.py"
+    if not solution_path.exists() or not ref_code:
+        return False
+    return solution_path.read_text().strip() == ref_code.strip()
 
 
 def pack_reference_as_solution() -> Solution:
@@ -298,11 +340,30 @@ def run_and_report(
     baseline_was_cached = baseline is not None
 
     if baseline is None:
+        # Check if solution is the unmodified reference — skip separate baseline
+        if _is_solution_reference():
+            if not quiet:
+                print("\nSolution is unmodified reference — skipping baseline profiling.")
+                print("Running benchmark to establish baseline from solution latency...")
+            results = run_fn(solution, make_config(SOLUTION_ITERATIONS))
+            if not results:
+                print("No results returned!")
+                return
+            save_baseline(results)
+            baseline = load_baseline()
+            if baseline is not None:
+                results = inject_baseline(results, baseline)
+            score = compute_score(results)
+            print_results(results, score, quiet=quiet)
+            save_trajectory(results, solution, score, label,
+                            baseline_cached=False, backend=backend)
+            return
+
         # Phase 1: Benchmark the reference implementation to measure its latency
         if not quiet:
             print("\nProfiling reference baseline...")
         ref_solution = pack_reference_as_solution()
-        baseline_results = run_fn(ref_solution, make_config(BASELINE_ITERATIONS))
+        baseline_results = run_fn(ref_solution, make_baseline_config())
         if not baseline_results:
             print("No results returned from baseline profiling!")
             return
@@ -312,9 +373,17 @@ def run_and_report(
             print("WARNING: Reference baseline failed for all workloads — cannot compute speedup.",
                   file=sys.stderr)
 
+    # If baseline is cached and solution is still the reference, skip Phase 2 entirely
+    if baseline_was_cached and _is_solution_reference():
+        if not quiet:
+            print("\nSolution is unmodified reference and baseline is cached — nothing to benchmark.")
+            print("Modify solution/kernel.py first, then re-run.")
+        return
+
     # Phase 2: Benchmark the actual solution with high iterations
     if not quiet:
-        print("\nUsing cached reference baseline...")
+        if baseline_was_cached:
+            print("\nUsing cached reference baseline...")
         print("Running benchmark...")
     results = run_fn(solution, make_config(SOLUTION_ITERATIONS))
     if not results:

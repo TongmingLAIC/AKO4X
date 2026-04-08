@@ -32,6 +32,12 @@ bash scripts/bench.sh --force-baseline    # Force re-profile reference
 
 `baseline.json` auto-invalidates when workloads change.
 
+**Global cache**: When a baseline is computed, it is also saved to the global cache at `baselines/<operator>/baseline.json` (relative to the AKO project root). When `spawn.py` creates a new child environment, it copies the cached baseline automatically — so most child environments never need to profile the reference at all.
+
+**Scratch mode optimization**: If the solution has not been modified from the reference implementation:
+- Without cached baseline: the solution is benchmarked once and its latency is saved as the baseline (skipping the separate reference profiling phase).
+- With cached baseline: the benchmark is skipped entirely with a message to modify the kernel first.
+
 ## Trajectory Tracking
 
 Each labeled run saves a snapshot to `trajectory/<timestamp_label>/`, containing all files from `solution/`, `config.toml`, and `results.json` with per-workload scores and metadata.
@@ -46,10 +52,9 @@ baseline_iterations = 5     # reference profiling iterations (keep low)
 solution_iterations = 100   # solution profiling iterations
 num_trials = 5
 warmup_runs = 3
+baseline_cache = "/path/to/baselines"  # global baseline cache directory
 ```
 
 CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
 
-> **Note on `baseline_iterations`**: CUPTI's internal tracking state accumulates across iterations, causing later iterations to report inflated latencies for heavy kernels (those launching 100+ CUDA ops per call, such as PyTorch reference implementations). The default of 5 is intentionally low to avoid this. For very heavy operators (e.g. `gdn_decode_qk4_v8_d128_k_last`), even 5 iterations may be too many — lower it further if reference profiling is slow. This affects all backends, not just Modal.
->
-> A low `baseline_iterations` does not hurt optimization workflow. The reference latency is cached in `baseline.json` after the first run, so subsequent runs reuse the same value. Even if the cached baseline is rough, it is **consistent** across runs — speedup changes between runs still reflect real solution improvements.
+> **Note on baseline profiling**: Baseline profiling uses a lightweight configuration (warmup=1, trials=1) regardless of the `warmup_runs` and `num_trials` settings, since the reference latency only needs to be approximately correct. The cached baseline is consistent across runs, so speedup changes still reflect real solution improvements.

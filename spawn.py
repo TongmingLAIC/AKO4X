@@ -297,6 +297,7 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     config_path = child_dir / "config.toml"
     if not config_path.exists():
         dataset_line = f'dataset_path = "{dataset_path.resolve()}"\n' if backend == "local" else ""
+        baseline_cache_dir = (PARENT_DIR.parent / "baselines").resolve()
         config_toml = (
             f'[solution]\n'
             f'name = "{operator}-solution"\n'
@@ -317,8 +318,15 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
             f'solution_iterations = 100\n'
             f'num_trials = 5\n'
             f'warmup_runs = 3\n'
+            f'baseline_cache = "{baseline_cache_dir}"\n'
         )
         config_path.write_text(config_toml)
+
+    # Copy cached baseline if available
+    global_baseline = PARENT_DIR.parent / "baselines" / operator / "baseline.json"
+    if global_baseline.exists():
+        shutil.copy2(global_baseline, child_dir / "baseline.json")
+        print(f"Copied cached baseline from {global_baseline}")
 
     # Generate backend-specific bench.sh / profile.sh and copy runner scripts
     if backend == "local":

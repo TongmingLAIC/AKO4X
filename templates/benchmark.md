@@ -14,7 +14,9 @@ The first benchmark run profiles the reference implementation and saves results 
 
 - The cache is **automatically invalidated** when the workload set changes (UUIDs in `docs/workloads.jsonl` differ from cached ones).
 - To force re-profiling: `bash scripts/bench.sh --force-baseline`
-- Do not increase `baseline_iterations` to get a "better" baseline — the reference timing is approximate by design, and higher iteration counts can cause CUPTI measurement artifacts (see below).
+- Do not increase `baseline_iterations` to get a "better" baseline — the reference timing is approximate by design.
+- If `baseline.json` already exists when the environment is created (pre-cached by `spawn.py`), baseline profiling is skipped entirely.
+- If the solution is still the unmodified reference and a baseline is cached, the benchmark is skipped with a message to modify the kernel first.
 
 ## Iteration Tuning
 
@@ -34,8 +36,8 @@ num_trials = 5             # trials per workload
 warmup_runs = 3            # warmup before measurement
 ```
 
-- **`baseline_iterations`** is intentionally low (default 5). CUPTI's internal tracking state accumulates across iterations — high counts (50+) cause inflated latencies for heavy kernels (100+ CUDA ops per call). For very heavy operators, lower it further (minimum 1). The cached baseline only needs to be approximately correct.
-- **`solution_iterations`** can stay at 100. Optimized kernels launch few CUDA ops, so CUPTI state accumulation is negligible.
+- **`baseline_iterations`** is intentionally low (default 5). The cached baseline only needs to be approximately correct. Baseline profiling automatically uses a lightweight configuration (warmup=1, trials=1) to minimize overhead.
+- **`solution_iterations`** can stay at 100. Optimized kernels launch few CUDA ops, so profiling is fast.
 - **Trim workloads** if benchmarking is still too slow: remove redundant entries from `docs/workloads.jsonl`. Workloads within the same group (same parameter values) are interchangeable — keeping fewer per group speeds up benchmarking without losing coverage.
 
 ## Trajectory Tracking
