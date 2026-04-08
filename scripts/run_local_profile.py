@@ -112,6 +112,7 @@ def run_ncu(args):
         "ncu_set": args.set,
         "ncu_page": args.page,
         "kernel_filter": args.kernel_name,
+        "backend": "local",
         "output": result,
     }
     profile_path = profiles_dir / f"w{args.workload_index}_{timestamp}.json"

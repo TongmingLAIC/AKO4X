@@ -139,6 +139,7 @@ def main(
     set: str = "detailed",
     page: str = "details",
     kernel_name: str = "",
+    sections: str = "",
     timeout: int = 60,
     max_lines: int = -1,
 ):
@@ -192,6 +193,8 @@ def main(
     ncu_kwargs = {"set": set, "page": page, "timeout": timeout}
     if kernel_name:
         ncu_kwargs["kernel_name"] = kernel_name
+    if sections:
+        ncu_kwargs["sections"] = [s.strip() for s in sections.split(",")]
     if max_lines > 0:
         ncu_kwargs["max_lines"] = max_lines
 
