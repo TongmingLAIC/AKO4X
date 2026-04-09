@@ -397,8 +397,13 @@ def run_and_report(
     baseline_was_cached = baseline is not None
 
     if baseline is None:
-        # Check if solution is the unmodified reference — skip separate baseline
-        if _is_solution_reference():
+        # Phase 1: Benchmark baseline to measure its latency
+        expert = load_expert_solution()
+
+        # Shortcut: solution is unmodified reference AND no expert baseline.
+        # In this case the reference IS the baseline — benchmark it once.
+        # When expert exists, we must always profile the expert for correct scoring.
+        if expert is None and _is_solution_reference():
             if not quiet:
                 print("\nSolution is unmodified reference — skipping baseline profiling.")
                 print("Running benchmark to establish baseline from solution latency...")
@@ -416,8 +421,6 @@ def run_and_report(
                             baseline_cached=False, backend=backend)
             return
 
-        # Phase 1: Benchmark baseline to measure its latency
-        expert = load_expert_solution()
         if expert is not None:
             if not quiet:
                 print(f"\nProfiling expert baseline ({expert.name})...")
