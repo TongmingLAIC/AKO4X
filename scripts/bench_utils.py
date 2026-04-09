@@ -51,6 +51,11 @@ def _load_benchmark_config() -> dict:
         "num_trials": bench.get("num_trials", 5),
         "warmup_runs": bench.get("warmup_runs", 3),
         "baseline_cache": bench.get("baseline_cache", ""),
+        "atol": bench.get("atol", 0.01),
+        "rtol": bench.get("rtol", 0.01),
+        "required_matched_ratio": bench.get("required_matched_ratio"),
+        "use_isolated_runner": bench.get("use_isolated_runner", False),
+        "timeout_seconds": bench.get("timeout_seconds", 300),
     }
 
 
@@ -61,6 +66,11 @@ SOLUTION_ITERATIONS = _bench_cfg["solution_iterations"]
 NUM_TRIALS = _bench_cfg["num_trials"]
 WARMUP_RUNS = _bench_cfg["warmup_runs"]
 BASELINE_CACHE = _bench_cfg["baseline_cache"]
+ATOL = _bench_cfg["atol"]
+RTOL = _bench_cfg["rtol"]
+REQUIRED_MATCHED_RATIO = _bench_cfg["required_matched_ratio"]
+USE_ISOLATED_RUNNER = _bench_cfg["use_isolated_runner"]
+TIMEOUT_SECONDS = _bench_cfg["timeout_seconds"]
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +233,11 @@ def make_config(iterations: int) -> BenchmarkConfig:
         iterations=iterations,
         num_trials=NUM_TRIALS,
         profile_baseline=False,
+        atol=ATOL,
+        rtol=RTOL,
+        required_matched_ratio=REQUIRED_MATCHED_RATIO,
+        use_isolated_runner=USE_ISOLATED_RUNNER,
+        timeout_seconds=TIMEOUT_SECONDS,
     )
 
 
@@ -237,6 +252,11 @@ def make_baseline_config() -> BenchmarkConfig:
         iterations=BASELINE_ITERATIONS,
         num_trials=1,
         profile_baseline=False,
+        atol=ATOL,
+        rtol=RTOL,
+        required_matched_ratio=REQUIRED_MATCHED_RATIO,
+        use_isolated_runner=USE_ISOLATED_RUNNER,
+        timeout_seconds=TIMEOUT_SECONDS,
     )
 
 
@@ -259,6 +279,11 @@ def make_expert_baseline_config() -> BenchmarkConfig:
         iterations=SOLUTION_ITERATIONS,
         num_trials=NUM_TRIALS,
         profile_baseline=False,
+        atol=ATOL,
+        rtol=RTOL,
+        required_matched_ratio=REQUIRED_MATCHED_RATIO,
+        use_isolated_runner=USE_ISOLATED_RUNNER,
+        timeout_seconds=TIMEOUT_SECONDS,
     )
 
 
@@ -278,7 +303,7 @@ def _is_solution_reference() -> bool:
     solution_path = PROJECT_ROOT / "solution" / "kernel.py"
     if not solution_path.exists() or not ref_code:
         return False
-    return solution_path.read_text().strip() == ref_code.strip()
+    return solution_path.read_text().replace('\r\n', '\n').strip() == ref_code.replace('\r\n', '\n').strip()
 
 
 def pack_reference_as_solution() -> Solution:

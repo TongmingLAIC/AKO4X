@@ -47,6 +47,7 @@ AKO4FIB/
 │   │   ├── objective-existing.md      # Objective for existing mode
 │   │   └── profiler-guide.md          # Inline profiler summary
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
+│   ├── evaluation.toml                # Per-op_type evaluation params (atol, rtol, timeout, etc.)
 │   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
 │   └── agent/
@@ -65,7 +66,8 @@ AKO4FIB/
 
 The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 
-- **`populate_child()`** — the main orchestration function. Creates the child directory structure, copies files, generates `config.toml` (inline template, not a separate file), and wires up backend-specific scripts.
+- **`populate_child()`** — the main orchestration function. Creates the child directory structure, copies files, generates `config.toml` (base defaults merged with `templates/evaluation.toml` overrides), and wires up backend-specific scripts.
+- **`load_evaluation_config()`** — reads `templates/evaluation.toml`, merges `[default]` with per-`op_type` overrides for evaluation parameters (atol, rtol, timeout, etc.).
 - **`render_template()`** — assembles the task file from `templates/task.md` + fragments. Block placeholders (alone on a line, e.g. `{{OBJECTIVE}}`) replace the entire line; inline placeholders (e.g. `{{OPERATOR}}`) are substituted within lines.
 - **`generate_context()`** (in `scripts/generate_context.py`) — extracts template variables (shapes, workload distribution) from the dataset.
 
@@ -86,7 +88,8 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Profiler detail docs | `templates/profiler/ncu.md` |
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |
-| config.toml defaults | `populate_child()` in `spawn.py` (inline string) |
+| config.toml defaults | `populate_child()` in `spawn.py` (base defaults + evaluation overrides) |
+| Evaluation params (atol, rtol, timeout) | `templates/evaluation.toml` (per-op_type sections) |
 | Benchmark runners | `scripts/run_local.py`, `scripts/run_modal.py` |
 | User-facing docs | `docs/*.md` |
 
@@ -119,6 +122,6 @@ Each agent type has a JSON config in `templates/agent/` (currently only `claude.
 
 - **Scripts must be self-contained**: Everything in `scripts/` is copied into child environments. No imports from the parent repo — children are standalone.
 - **Operator data is external**: `definition.json`, `workloads.jsonl`, and reference kernels come from the dataset at spawn time. This repo never stores operator-specific data.
-- **config.toml is generated inline**: The template is a string literal in `populate_child()`, not a separate template file.
+- **config.toml `[benchmark]` merges evaluation overrides**: Base defaults are in `populate_child()`, then `templates/evaluation.toml` provides per-op_type overrides (atol, rtol, timeout, etc.). The `[solution]` and `[build]` sections are still inline strings.
 - **bench_utils.py is shared**: Used by both `run_local.py` and `run_modal.py`, and also copied into the Modal image. Keep it self-contained with no heavy dependencies beyond what's already required.
 - **Child environments are disposable**: This repo is the source of truth. Any fix to scripts or templates must be made here, then new children spawned to pick up changes.

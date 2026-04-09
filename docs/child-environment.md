@@ -38,11 +38,18 @@ The agent updates these fields to match its kernel files:
 - **`entry_point`**: e.g. `kernel.py::run` or `binding.py::kernel`
 - **`destination_passing_style`**: `false` by default; set `true` when using pre-allocated output buffers
 
-The `[benchmark]` section controls iteration counts:
+The `[benchmark]` section controls iteration counts and evaluation parameters:
 
 - **`baseline_iterations`**: Reference profiling iterations (default: `5`)
 - **`solution_iterations`**: Solution profiling iterations (default: `100`)
 - **`num_trials`**: Number of trials per workload (default: `5`)
 - **`warmup_runs`**: Warmup runs before timing (default: `3`)
+- **`timeout_seconds`**: Per-workload evaluation timeout (default: `300`)
+- **`use_isolated_runner`**: Run each workload in an isolated process (default: `true`)
+- **`atol`**: Absolute tolerance for correctness checking (default: `0.01`)
+- **`rtol`**: Relative tolerance for correctness checking (default: `0.01`)
+- **`required_matched_ratio`**: Required ratio of elements within tolerance (omitted = use evaluator default)
+
+Evaluation parameters are set automatically at spawn time based on the operator type, from `templates/evaluation.toml` in the parent repo. You normally don't need to change them.
 
 For benchmarking commands, output interpretation, baseline caching, trajectory tracking, and iteration tuning, see [Benchmarking](benchmarking.md).

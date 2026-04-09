@@ -92,6 +92,27 @@ def load_agent_config(agent):
     return config, config["task_filename"], config["hints_filename"]
 
 
+def load_evaluation_config(op_type):
+    """Load evaluation overrides from templates/evaluation.toml.
+
+    Merges [default] with [op_type]-specific overrides. Returns a dict of
+    key-value pairs to include in the child's config.toml [benchmark] section.
+    """
+    eval_path = PARENT_DIR / "templates" / "evaluation.toml"
+    if not eval_path.is_file():
+        return {}
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    with open(eval_path, "rb") as f:
+        eval_config = tomllib.load(f)
+    merged = {}
+    merged.update(eval_config.get("default", {}))
+    merged.update(eval_config.get(op_type, {}))
+    return merged
+
+
 def resolve_dataset(dataset_arg):
     """Resolve dataset path from arg or environment variable."""
     dataset_path = dataset_arg or os.environ.get("FIB_DATASET_PATH", "")
@@ -245,7 +266,7 @@ def render_template(task_text, placeholders):
     return "".join(lines)
 
 
-def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
+def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_path,
                    definition_path, workloads_path, dataset_path, agent_config, hints_path, hints_filename,
                    expert_baseline_path=None):
     """Create child directory structure and populate with files."""
@@ -324,6 +345,29 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
     if not config_path.exists():
         dataset_line = f'dataset_path = "{dataset_path.resolve()}"\n' if backend == "local" else ""
         baseline_cache_dir = (PARENT_DIR.parent / "baselines").resolve()
+
+        # Base benchmark defaults, then merge evaluation template overrides
+        bench_params = {
+            "baseline_iterations": 5,
+            "solution_iterations": 100,
+            "num_trials": 5,
+            "warmup_runs": 3,
+            "baseline_cache": str(baseline_cache_dir),
+        }
+        bench_params.update(load_evaluation_config(op_type))
+
+        # Format [benchmark] section as TOML
+        bench_lines = []
+        for key, value in bench_params.items():
+            if isinstance(value, bool):
+                bench_lines.append(f'{key} = {"true" if value else "false"}')
+            elif isinstance(value, str):
+                bench_lines.append(f'{key} = "{value}"')
+            elif isinstance(value, float):
+                bench_lines.append(f'{key} = {value}')
+            elif isinstance(value, int):
+                bench_lines.append(f'{key} = {value}')
+
         config_toml = (
             f'[solution]\n'
             f'name = "{operator}-solution"\n'
@@ -340,11 +384,7 @@ def populate_child(child_dir, *, operator, gpu, mode, backend, kernel_path,
             f'destination_passing_style = false\n'
             f'\n'
             f'[benchmark]\n'
-            f'baseline_iterations = 5\n'
-            f'solution_iterations = 100\n'
-            f'num_trials = 5\n'
-            f'warmup_runs = 3\n'
-            f'baseline_cache = "{baseline_cache_dir}"\n'
+            + "\n".join(bench_lines) + "\n"
         )
         config_path.write_text(config_toml)
 
@@ -493,6 +533,7 @@ def main():
     populate_child(
         child_dir,
         operator=operator,
+        op_type=op_type,
         gpu=gpu,
         mode=args.mode,
         backend=args.backend,

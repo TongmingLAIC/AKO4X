@@ -34,6 +34,12 @@ baseline_iterations = 5    # reference profiling iterations (keep low)
 solution_iterations = 100  # solution profiling iterations
 num_trials = 5             # trials per workload
 warmup_runs = 3            # warmup before measurement
+timeout_seconds = 300      # per-workload evaluation timeout
+use_isolated_runner = true # run each workload in an isolated process
+# Correctness tolerances (set per operator type, don't change unless you know why):
+# atol = 0.01
+# rtol = 0.01
+# required_matched_ratio = 0.9
 ```
 
 - **`baseline_iterations`** is intentionally low (default 5). The cached baseline only needs to be approximately correct. Baseline profiling automatically uses a lightweight configuration (warmup=1, trials=1) to minimize overhead.

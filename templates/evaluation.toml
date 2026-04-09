@@ -1,0 +1,12 @@
+# Evaluation configuration by operator type.
+# [default] values apply to all operators; per-op_type sections override specific fields.
+# These values are merged into config.toml [benchmark] at spawn time.
+
+[default]
+timeout_seconds = 300
+use_isolated_runner = true
+
+[moe]
+atol = 1.0
+rtol = 0.3
+required_matched_ratio = 0.9

@@ -67,7 +67,7 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
     from flashinfer_bench.bench.benchmark import Benchmark as _Benchmark
 
     if config is None:
-        config = BenchmarkConfig(warmup_runs=3, iterations=100, num_trials=5)
+        config = BenchmarkConfig(warmup_runs=3, iterations=100, num_trials=5, timeout_seconds=300)
 
     # Import bench_utils from the file copied into the image
     import sys as _sys

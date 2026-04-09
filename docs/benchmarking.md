@@ -53,8 +53,28 @@ solution_iterations = 100   # solution profiling iterations
 num_trials = 5
 warmup_runs = 3
 baseline_cache = "/path/to/baselines"  # global baseline cache directory
+timeout_seconds = 300       # per-workload evaluation timeout
+use_isolated_runner = true  # run each workload in an isolated process
+# Correctness tolerances (set per operator type at spawn time):
+# atol = 0.01
+# rtol = 0.01
+# required_matched_ratio = 0.9
 ```
 
 CUPTI-based profiling can be slow. To speed up iteration during development, you can reduce `solution_iterations`, or trim `docs/workloads.jsonl` to benchmark fewer workloads. Both the user and the agent can edit these values.
+
+## Evaluation Parameters
+
+Correctness tolerances and runner settings are configured per operator type. These are set automatically at spawn time from `templates/evaluation.toml` in the parent repo and written into `config.toml`.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `timeout_seconds` | Per-workload evaluation timeout (seconds) | `300` |
+| `use_isolated_runner` | Run each workload in an isolated process | `true` |
+| `atol` | Absolute tolerance for correctness | `0.01` |
+| `rtol` | Relative tolerance for correctness | `0.01` |
+| `required_matched_ratio` | Required ratio of elements within tolerance | evaluator default |
+
+Some operators (e.g. MoE FP8) need relaxed tolerances due to numerical precision characteristics. These are pre-configured — you normally don't need to change them.
 
 > **Note on baseline profiling**: Baseline profiling uses a lightweight configuration (warmup=1, trials=1) regardless of the `warmup_runs` and `num_trials` settings, since the reference latency only needs to be approximately correct. The cached baseline is consistent across runs, so speedup changes still reflect real solution improvements.
