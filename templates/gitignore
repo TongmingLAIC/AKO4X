@@ -15,6 +15,7 @@ profiles/
 .triton_cache/
 solution.json
 baseline.json
+.bench_pending
 
 # OS / editor
 .DS_Store

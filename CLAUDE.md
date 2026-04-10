@@ -52,7 +52,8 @@ AKO4FIB/
 │   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
 │   ├── profiler/                      # Per-tool profiler docs (copied to child docs/profiler/)
 │   └── agent/
-│       └── claude.json                # Agent config (output filenames + permissions)
+│       ├── claude.json                # Agent config (output filenames + permissions)
+│       └── hooks/                     # Workflow enforcement hooks (copied to child .claude/hooks/)
 └── scripts/
     ├── generate_context.py            # Extracts operator metadata for template rendering
     ├── bench_utils.py                 # Shared benchmark utilities (baseline caching, scoring)
@@ -87,7 +88,9 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Benchmark reference | `templates/benchmark.md` |
 | Profiler inline summary | `templates/fragments/profiler-guide.md` |
 | Execution tracing protocol | `templates/fragments/logging-protocol.md` (enabled by `--trace`) |
-| Iteration log template | `templates/iterations.md` |
+| Iteration log template (light) | `templates/iterations.md` |
+| Iteration log template (heavy, --trace) | `templates/iterations-trace.md` |
+| Workflow hooks | `templates/agent/hooks/*.sh` |
 | Profiler detail docs | `templates/profiler/ncu.md` |
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |
@@ -99,6 +102,19 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 ## Agent Config System
 
 Each agent type has a JSON config in `templates/agent/` (currently only `claude.json`). Fields: `task_filename`, `hints_filename`, `permissions`. The `permissions` field drives `.claude/settings.local.json` generation in child environments. Use `--agent <name>` at spawn time to select a config.
+
+## Workflow Enforcement Hooks
+
+Hook scripts in `templates/agent/hooks/` are copied to child `.claude/hooks/` and configured in `.claude/settings.local.json`. They enforce the iteration protocol via a marker-file gate:
+
+1. **`post-bench.sh`** (PostToolUse, Bash): After bench.sh succeeds, creates `.bench_pending` marker and outputs a reminder to update ITERATIONS.md.
+2. **`gate-solution-edit.sh`** (PreToolUse, Edit): Blocks edits to `solution/` files while `.bench_pending` exists (exit 2).
+3. **`gate-bench.sh`** (PreToolUse, Bash): Blocks re-running bench.sh while `.bench_pending` exists (exit 2).
+4. **`clear-pending.sh`** (PostToolUse, Edit): Clears `.bench_pending` when ITERATIONS.md is edited.
+
+**Flow**: bench.sh → marker created → agent must edit ITERATIONS.md → marker cleared → agent can edit code / run bench again. Read-only operations (Read, Grep, profile.sh, WebSearch) are never blocked.
+
+The `--trace` flag controls iteration template weight: `iterations.md` (light, 4 fields) vs `iterations-trace.md` (heavy, full audit trail). Hooks are the same in both modes.
 
 ## Extending the System
 

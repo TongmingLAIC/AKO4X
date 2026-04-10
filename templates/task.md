@@ -69,10 +69,12 @@ Read `docs/benchmark.md` for scoring, baseline caching, iteration tuning, and tr
 3. **Iteration protocol** — every modification followed by a bench run is one iteration:
    1. Modify kernel
    2. `bash scripts/bench.sh --label "iter-N description"`
-   3. Update `ITERATIONS.md` (summary table row + detail entry)
+   3. Update `ITERATIONS.md` (summary table row + detail entry) — **hooks block further edits and bench runs until this is done**
    4. Git commit: `bench(<score>): <one-line description>`
 4. Roll back on regression; check per-group breakdown to target weak workloads
-5. When speedup stalls or a bottleneck is unclear, profile the slowest workloads
+5. **When stuck or uncertain** — investigate before the next code change:
+   - Profile: `bash scripts/profile.sh <index>` — when bottleneck is unclear or speedup stalled
+   - Search: WebSearch for API behavior, hardware specs, or optimization patterns
 6. Stop when no further improvements found; summarize results
 
 {{LOGGING_PROTOCOL}}

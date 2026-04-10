@@ -10,14 +10,21 @@ Every modification-benchmark cycle is one **iteration**. Follow this protocol st
 
 ### After benchmark completes
 
+Hooks will block further code edits and bench runs until you update ITERATIONS.md.
+
 4. Compare actual results against your expectation — the **Expected vs Actual** section is mandatory
 5. If your prediction was wrong, update your mental model and record the **belief update**
 6. If results regressed, **revert immediately** and add an entry to the "Rejected Paths" section in ITERATIONS.md
+7. Git commit: `bench(<score>): <one-line description>`
 
-### Tool use annotation
+### Investigation tools
 
-When you use a tool for investigation (profiling, web search, reading docs/papers),
-annotate it inline with a before/after pair:
+When bottleneck is unclear or speedup has stalled for several iterations, investigate **before** making the next code change:
+
+- **Profile**: `bash scripts/profile.sh <index>` — use when you need to know if the kernel is memory-bound, compute-bound, or launch-bound, or to check occupancy and register pressure.
+- **WebSearch**: use when encountering unfamiliar APIs, hardware characteristics, or optimization patterns (e.g., "triton grouped GEMM best practices", "B200 FP8 tensor core throughput").
+
+When you use a tool for investigation, annotate it inline with a before/after pair:
 
 **Before the tool call:**
 > **Investigate**: [why this tool now] — expecting [what signal]
@@ -26,8 +33,7 @@ annotate it inline with a before/after pair:
 > **Found**: [key data point] — means [how this changes your plan]
 
 Keep each annotation to ONE sentence. The findings should flow into the relevant
-fields of your next ITERATIONS.md entry (Profiler data, Bottleneck hypothesis,
-Alternatives rejected, etc.). Do NOT create a separate iteration entry for
+fields of your next ITERATIONS.md entry. Do NOT create a separate iteration entry for
 investigation-only actions. An iteration = a code change + benchmark.
 
 ### Every 5 iterations, write a progress snapshot

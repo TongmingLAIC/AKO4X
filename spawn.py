@@ -270,7 +270,7 @@ def render_template(task_text, placeholders):
 
 def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_path,
                    definition_path, workloads_path, dataset_path, agent_config, hints_path, hints_filename,
-                   expert_baseline_path=None):
+                   expert_baseline_path=None, trace=False):
     """Create child directory structure and populate with files."""
     # Create directories — flat solution/ (no language subdirectory)
     for subdir in [".claude", "docs", "scripts", "solution"]:
@@ -285,9 +285,10 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
     shutil.copytree(PARENT_DIR / "templates" / "languages", child_dir / "docs" / "languages")
     shutil.copy2(PARENT_DIR / "templates" / "benchmark.md", child_dir / "docs" / "benchmark.md")
 
-    # Copy hints and iterations template
+    # Copy hints and iterations template (heavy version for --trace, light for default)
     shutil.copy2(Path(hints_path), child_dir / hints_filename)
-    shutil.copy2(PARENT_DIR / "templates" / "iterations.md", child_dir / "ITERATIONS.md")
+    iterations_template = "iterations-trace.md" if trace else "iterations.md"
+    shutil.copy2(PARENT_DIR / "templates" / iterations_template, child_dir / "ITERATIONS.md")
 
     # Determine language and entry_point for config.toml
     language = "python"
@@ -419,8 +420,57 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
         p.write_text(content)
         p.chmod(0o755)
 
-    # Generate .claude/settings.local.json
-    settings = {"permissions": agent_config["permissions"]}
+    # Copy workflow enforcement hooks
+    hooks_src = PARENT_DIR / "templates" / "agent" / "hooks"
+    hooks_dst = child_dir / ".claude" / "hooks"
+    if hooks_src.is_dir():
+        shutil.copytree(hooks_src, hooks_dst)
+        for hook_file in hooks_dst.iterdir():
+            if hook_file.is_file():
+                hook_file.chmod(0o755)
+
+    # Generate .claude/settings.local.json (permissions + hooks)
+    settings = {
+        "permissions": agent_config["permissions"],
+        "hooks": {
+            "PostToolUse": [
+                {
+                    "matcher": "Bash",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Bash(*bench.sh*)",
+                        "command": ".claude/hooks/post-bench.sh",
+                    }],
+                },
+                {
+                    "matcher": "Edit",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Edit(*ITERATIONS.md)",
+                        "command": ".claude/hooks/clear-pending.sh",
+                    }],
+                },
+            ],
+            "PreToolUse": [
+                {
+                    "matcher": "Edit",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Edit(*/solution/*)",
+                        "command": ".claude/hooks/gate-solution-edit.sh",
+                    }],
+                },
+                {
+                    "matcher": "Bash",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Bash(*bench.sh*)",
+                        "command": ".claude/hooks/gate-bench.sh",
+                    }],
+                },
+            ],
+        },
+    }
     settings_path = child_dir / ".claude" / "settings.local.json"
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 
@@ -549,6 +599,7 @@ def main():
         hints_path=hints_path,
         hints_filename=hints_filename,
         expert_baseline_path=expert_baseline,
+        trace=args.trace,
     )
 
     # Render and write task file
