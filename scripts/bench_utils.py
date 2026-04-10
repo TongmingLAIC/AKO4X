@@ -95,8 +95,12 @@ def get_trace_set_path() -> str:
     return path
 
 
-def build_bench_trace_set(trace_set_path: str, solution: Solution) -> TraceSet:
-    """Load trace set and build a single-operator benchmark TraceSet."""
+def build_bench_trace_set(trace_set_path: str, solution: Solution, max_workloads: int = 0) -> TraceSet:
+    """Load trace set and build a single-operator benchmark TraceSet.
+
+    Args:
+        max_workloads: If > 0, only include the first N workloads (for quick testing).
+    """
     trace_set = TraceSet.from_path(trace_set_path)
 
     if solution.definition not in trace_set.definitions:
@@ -107,6 +111,9 @@ def build_bench_trace_set(trace_set_path: str, solution: Solution) -> TraceSet:
 
     if not workloads:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
+
+    if max_workloads > 0:
+        workloads = workloads[:max_workloads]
 
     return TraceSet(
         root=trace_set.root,
@@ -344,11 +351,23 @@ def pack_reference_as_solution() -> Solution:
     return solution
 
 
+def _truncate_log(log: str, max_chars: int = 3000) -> str:
+    """Truncate log to the last max_chars characters, preserving line boundaries."""
+    if not log or len(log) <= max_chars:
+        return log
+    truncated = log[-max_chars:]
+    nl = truncated.find("\n")
+    if nl != -1 and nl < 200:
+        truncated = truncated[nl + 1:]
+    return f"[...truncated...]\n{truncated}"
+
+
 def extract_results(result_trace_set, definition_name: str) -> dict:
     """Extract benchmark results from a TraceSet into a plain dict.
 
     Converts Trace objects with Evaluation data into a serializable dict
     keyed by {definition_name: {workload_uuid: {...}}}.
+    Includes error logs for non-PASSED workloads.
     """
     traces = result_trace_set.traces.get(definition_name, [])
     results = {definition_name: {}}
@@ -369,6 +388,9 @@ def extract_results(result_trace_set, definition_name: str) -> dict:
                 max_rel = trace.evaluation.correctness.max_relative_error
                 entry["max_abs_error"] = "NaN" if (max_abs is not None and math.isnan(max_abs)) else max_abs
                 entry["max_rel_error"] = "NaN" if (max_rel is not None and math.isnan(max_rel)) else max_rel
+            # Include error log for non-PASSED workloads
+            if trace.evaluation.status.value != "PASSED" and getattr(trace.evaluation, "log", ""):
+                entry["error_log"] = _truncate_log(trace.evaluation.log)
             results[definition_name][trace.workload.uuid] = entry
 
     return results
@@ -382,6 +404,7 @@ def run_and_report(
     label: str = None,
     backend: str = "local",
     quiet: bool = False,
+    max_workloads: int = 0,
 ):
     """Two-phase benchmark orchestration shared by local and modal runners.
 
@@ -392,7 +415,13 @@ def run_and_report(
         force_baseline: If True, re-profile reference even if cached.
         label: Optional label for trajectory tracking.
         backend: Backend name for trajectory metadata.
+        max_workloads: If > 0, only benchmark the first N workloads (quick test mode).
+                       Partial results are NOT saved to baseline cache.
     """
+    quick_mode = max_workloads > 0
+    if quick_mode and not quiet:
+        print(f"\n*** Quick test mode: running first {max_workloads} workload(s) only ***")
+
     baseline = None if force_baseline else load_baseline()
     baseline_was_cached = baseline is not None
 
@@ -411,7 +440,8 @@ def run_and_report(
             if not results:
                 print("No results returned!")
                 return
-            save_baseline(results)
+            if not quick_mode:
+                save_baseline(results)
             baseline = load_baseline()
             if baseline is not None:
                 results = inject_baseline(results, baseline)
@@ -433,8 +463,17 @@ def run_and_report(
         if not baseline_results:
             print("No results returned from baseline profiling!")
             return
-        save_baseline(baseline_results)
-        baseline = load_baseline()
+        if not quick_mode:
+            save_baseline(baseline_results)
+            baseline = load_baseline()
+        else:
+            # In quick mode, use baseline_results directly without caching
+            baseline = {"workloads": {}}
+            for def_name, traces in baseline_results.items():
+                for uuid, result in traces.items():
+                    lat_ms = result.get("latency_ms")
+                    if lat_ms is not None:
+                        baseline["workloads"][uuid] = {"reference_latency_ms": lat_ms}
         if baseline is None:
             print("WARNING: Reference baseline failed for all workloads — cannot compute speedup.",
                   file=sys.stderr)
@@ -556,8 +595,20 @@ def compute_score(results: dict) -> dict:
 # Output
 # ---------------------------------------------------------------------------
 
+def _format_error_log(log: str, max_lines: int = 20) -> str:
+    """Extract the last max_lines lines from an error log for display."""
+    lines = log.rstrip("\n").split("\n")
+    if len(lines) <= max_lines:
+        return "\n".join(f"    | {l}" for l in lines)
+    shown = lines[-max_lines:]
+    return f"    | [...{len(lines) - max_lines} lines omitted...]\n" + "\n".join(f"    | {l}" for l in shown)
+
+
 def print_results(results: dict, score: dict = None, quiet: bool = False):
     """Print benchmark results in a formatted way."""
+    error_logs_shown = 0
+    max_error_logs = 3
+
     if not quiet:
         for def_name, traces in results.items():
             print(f"\n{def_name}:")
@@ -579,6 +630,14 @@ def print_results(results: dict, score: dict = None, quiet: bool = False):
                     print(f" | abs_err={abs_str}, rel_err={rel_str}", end="")
 
                 print()
+
+                # Show error log for non-PASSED workloads (up to max_error_logs)
+                if status != "PASSED" and result.get("error_log") and error_logs_shown < max_error_logs:
+                    print(_format_error_log(result["error_log"]))
+                    error_logs_shown += 1
+                elif status != "PASSED" and result.get("error_log") and error_logs_shown == max_error_logs:
+                    print("    | (additional error logs omitted — see results.json in trajectory/)")
+                    error_logs_shown += 1  # only print this notice once
 
     if score:
         print()

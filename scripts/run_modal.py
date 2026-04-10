@@ -62,7 +62,7 @@ image = (
 
 
 @app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
-def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
+def run_benchmark(solution: Solution, config: BenchmarkConfig = None, max_workloads: int = 0) -> dict:
     """Run benchmark on Modal GPU and return results."""
     from flashinfer_bench.bench.benchmark import Benchmark as _Benchmark
 
@@ -74,15 +74,17 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
     _sys.path.insert(0, "/root/project/scripts")
     from bench_utils import build_bench_trace_set, extract_results
 
-    bench_trace_set = build_bench_trace_set(TRACE_SET_PATH, solution)
+    bench_trace_set = build_bench_trace_set(TRACE_SET_PATH, solution, max_workloads=max_workloads)
     benchmark = _Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
     return extract_results(result_trace_set, solution.definition)
 
 
 @app.local_entrypoint()
-def main(label: str = None, force_baseline: bool = False, quiet: bool = False):
+def main(label: str = None, force_baseline: bool = False, quiet: bool = False, first: int = 0):
     """Pack solution and run benchmark on Modal GPU, with trajectory tracking."""
+    from functools import partial
+
     from scripts.bench_utils import run_and_report
     from scripts.pack_solution import pack_solution
 
@@ -96,10 +98,12 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False):
     if not quiet:
         print(f"Loaded: {solution.name} ({solution.definition})")
 
+    run_fn = partial(run_benchmark.remote, max_workloads=first) if first else run_benchmark.remote
     run_and_report(
-        solution, run_benchmark.remote,
+        solution, run_fn,
         force_baseline=force_baseline,
         label=label,
         backend=f"modal-{_GPU_TYPE.lower()}",
         quiet=quiet,
+        max_workloads=first,
     )

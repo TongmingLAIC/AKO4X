@@ -49,10 +49,11 @@ bash scripts/bench.sh
 
 Compiles, checks correctness, and measures latency automatically.
 
-- **PASSED** = correct output within tolerance. **FAILED** = incorrect or crash. All {{NUM_WORKLOADS}} workloads must PASS.
+- **PASSED** = correct output within tolerance. **FAILED** / **RUNTIME_ERROR** / **COMPILE_ERROR** = incorrect or crash — the error traceback is printed inline and saved to `trajectory/*/results.json`.
 - Focus on reducing **latency** across workloads. {{BASELINE_NOTE}}
 - `bash scripts/bench.sh --label "description"` — saves snapshot to `trajectory/`.
 - `bash scripts/bench.sh -q` — only prints score, per-group speedup, and latency.
+- `bash scripts/bench.sh --first 1` — quick test: only run 1 workload for fast compile/correctness checks (does not cache baseline).
 - `timeout 600 bash scripts/bench.sh` — use a timeout, especially on first run.
 
 Read `docs/benchmark.md` for scoring, baseline caching, iteration tuning, and troubleshooting.
@@ -71,3 +72,5 @@ Read `docs/benchmark.md` for scoring, baseline caching, iteration tuning, and tr
 4. Roll back on regression; check per-group breakdown to target weak workloads
 5. When speedup stalls or a bottleneck is unclear, profile the slowest workloads
 6. Stop when no further improvements found; summarize results
+
+{{LOGGING_PROTOCOL}}

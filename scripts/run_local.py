@@ -8,6 +8,7 @@ Caches reference baseline on first run for stable, efficient subsequent runs.
 import argparse
 import os
 import sys
+from functools import partial
 from pathlib import Path
 
 # Add project root to path for imports
@@ -24,10 +25,10 @@ from scripts.bench_utils import (
 from scripts.pack_solution import pack_solution
 
 
-def run_benchmark(solution: Solution, config: BenchmarkConfig) -> dict:
+def run_benchmark(solution: Solution, config: BenchmarkConfig, max_workloads: int = 0) -> dict:
     """Run benchmark locally and return results."""
     trace_set_path = get_trace_set_path()
-    bench_trace_set = build_bench_trace_set(trace_set_path, solution)
+    bench_trace_set = build_bench_trace_set(trace_set_path, solution, max_workloads=max_workloads)
     benchmark = Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
     return extract_results(result_trace_set, solution.definition)
@@ -42,6 +43,8 @@ def main():
                         help="Force re-profiling of reference baseline")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Only print score summary and per-group breakdown")
+    parser.add_argument("--first", type=int, default=0, metavar="N",
+                        help="Only run first N workloads (quick test mode, does not cache baseline)")
     args = parser.parse_args()
 
     label = args.label_flag or args.label
@@ -59,12 +62,14 @@ def main():
     if not args.quiet:
         print(f"Loaded: {solution.name} ({solution.definition})")
 
+    run_fn = partial(run_benchmark, max_workloads=args.first) if args.first else run_benchmark
     run_and_report(
-        solution, run_benchmark,
+        solution, run_fn,
         force_baseline=args.force_baseline,
         label=label,
         backend="local",
         quiet=args.quiet,
+        max_workloads=args.first,
     )
 
 

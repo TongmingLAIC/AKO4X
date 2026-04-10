@@ -46,6 +46,25 @@ use_isolated_runner = true # run each workload in an isolated process
 - **`solution_iterations`** can stay at 100. Optimized kernels launch few CUDA ops, so profiling is fast.
 - **Trim workloads** if benchmarking is still too slow: remove redundant entries from `docs/workloads.jsonl`. Workloads within the same group (same parameter values) are interchangeable — keeping fewer per group speeds up benchmarking without losing coverage.
 
+## Quick Test Mode
+
+Use `--first N` to run only the first N workloads for fast iteration:
+
+```bash
+bash scripts/bench.sh --first 1 --label "debug"   # single workload, fast compile check
+bash scripts/bench.sh --first 3                     # first 3 workloads
+```
+
+- Useful for quickly validating that your kernel compiles and produces correct output before running the full suite.
+- **Does not cache baseline** — avoids overwriting a valid full baseline with partial results.
+- Trajectory is still saved, so you can inspect `results.json` for error details.
+
+## Error Diagnostics
+
+When a workload fails (RUNTIME_ERROR, COMPILE_ERROR, INCORRECT_NUMERICAL, etc.), the benchmark now prints the error traceback inline (up to 20 lines for the first 3 failed workloads). The full error log is saved in `trajectory/*/results.json` under the `error_log` field for each failed workload.
+
+This eliminates the need to guess why a kernel failed — check the traceback first.
+
 ## Trajectory Tracking
 
 Each labeled run saves a snapshot to `trajectory/YYYYMMDD_HHMMSS_label/`:
