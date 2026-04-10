@@ -241,7 +241,6 @@ def render_template(task_text, placeholders):
     block_keys = {
         "{{OBJECTIVE}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
-        "{{PROFILER_GUIDE}}",
         "{{LOGGING_PROTOCOL}}",
     }
     inline_keys = [
@@ -409,7 +408,16 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
         shutil.copy2(PARENT_DIR / "scripts" / "run_local_profile.py", child_dir / "scripts" / "run_local_profile.py")
     else:
         bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal.py "$@"\n'
-        profile_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal_profile.py -- "$@"\n'
+        profile_sh = (
+            '#!/bin/bash\n'
+            'cd "$(dirname "$0")/.." || exit 1\n'
+            '# Translate positional index to --workload-index for Modal CLI compatibility\n'
+            'if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then\n'
+            '  modal run scripts/run_modal_profile.py -- --workload-index "$@"\n'
+            'else\n'
+            '  modal run scripts/run_modal_profile.py -- "$@"\n'
+            'fi\n'
+        )
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal_profile.py", child_dir / "scripts" / "run_modal_profile.py")
 
@@ -542,7 +550,7 @@ def main():
     # Resolve fragments
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
-    profiler_guide = read_fragment(fragments_dir / "profiler-guide.md")
+    # profiler-guide.md no longer inlined — referenced via docs/profiler/ncu.md pointer in task.md
     logging_protocol = read_fragment(fragments_dir / "logging-protocol.md") if args.trace else ""
 
     # Pre-pass: substitute inline placeholders in objective fragment
@@ -565,7 +573,6 @@ def main():
     )
     placeholders = {
         "{{OBJECTIVE}}": objective,
-        "{{PROFILER_GUIDE}}": profiler_guide,
         "{{LOGGING_PROTOCOL}}": logging_protocol,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],
