@@ -45,7 +45,8 @@ AKO4FIB/
 │   ├── fragments/
 │   │   ├── objective-scratch.md       # Objective for scratch mode
 │   │   ├── objective-existing.md      # Objective for existing mode
-│   │   └── profiler-guide.md          # Inline profiler summary
+│   │   ├── profiler-guide.md          # Inline profiler summary
+│   │   └── logging-protocol.md        # Execution tracing protocol (--trace)
 │   ├── languages/                     # Per-language detail docs (copied to child docs/languages/)
 │   ├── evaluation.toml                # Per-op_type evaluation params (atol, rtol, timeout, etc.)
 │   ├── benchmark.md                # Benchmarking reference (copied to child docs/benchmark.md)
@@ -85,6 +86,8 @@ The `main()` function in `spawn.py` drives the pipeline. Key entry points:
 | Language detail docs | `templates/languages/*.md` |
 | Benchmark reference | `templates/benchmark.md` |
 | Profiler inline summary | `templates/fragments/profiler-guide.md` |
+| Execution tracing protocol | `templates/fragments/logging-protocol.md` (enabled by `--trace`) |
+| Iteration log template | `templates/iterations.md` |
 | Profiler detail docs | `templates/profiler/ncu.md` |
 | Agent config | `templates/agent/claude.json` |
 | Hints template | `templates/hints.md` |

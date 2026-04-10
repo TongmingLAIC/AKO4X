@@ -50,6 +50,7 @@ def parse_args():
     parser.add_argument("--name", default="", dest="label")
     parser.add_argument("--dataset", default="")
     parser.add_argument("--baseline", default="", help="Path to expert baseline Solution JSON")
+    parser.add_argument("--trace", action="store_true", help="Enable execution tracing protocol in task template")
     return parser.parse_args()
 
 
@@ -241,6 +242,7 @@ def render_template(task_text, placeholders):
         "{{OBJECTIVE}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
         "{{PROFILER_GUIDE}}",
+        "{{LOGGING_PROTOCOL}}",
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
@@ -491,6 +493,7 @@ def main():
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
     profiler_guide = read_fragment(fragments_dir / "profiler-guide.md")
+    logging_protocol = read_fragment(fragments_dir / "logging-protocol.md") if args.trace else ""
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
@@ -513,6 +516,7 @@ def main():
     placeholders = {
         "{{OBJECTIVE}}": objective,
         "{{PROFILER_GUIDE}}": profiler_guide,
+        "{{LOGGING_PROTOCOL}}": logging_protocol,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],
         "{{OPERATOR}}": operator,
