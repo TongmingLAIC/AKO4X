@@ -44,12 +44,9 @@ bash scripts/profile.sh <index>                # NCU profile a specific workload
    1. State your bottleneck hypothesis and what you expect the benchmark to show
    2. Modify kernel
    3. `bash scripts/bench.sh --label "iter-N description"`
-   4. Update `ITERATIONS.md` — **hooks block further edits and bench runs until this is done**. The Expected vs Actual field is mandatory.
-   5. If regression: revert immediately, add to Rejected Paths in ITERATIONS.md
-   6. Git commit: `bench(<score>): <one-line description>`
+   4. Update `ITERATIONS.md` — **hooks block further edits and bench runs until this is done**
+   5. Git commit: `bench(<score>): <one-line description>`
 4. **When stuck or uncertain** — investigate before the next code change:
    - Profile: `bash scripts/profile.sh <index>` — when bottleneck is unclear or speedup stalled
    - Search: WebSearch for API behavior, hardware specs, or optimization patterns
-5. **Every 5 iterations**: append a progress snapshot to ITERATIONS.md (baseline, current best, confirmed bottlenecks, remaining hypotheses, biggest opportunity)
-6. **Scale**: architecture changes → full iteration entry. Parameter tuning (≤2 constants) → Parameter Sweeps table row
-7. Stop when no further improvements found; summarize results
+5. Stop when no further improvements found; summarize results

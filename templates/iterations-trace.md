@@ -2,14 +2,17 @@
 
 ## Summary
 
-<!-- Append one row per iteration. Status: improved / no-change / regression / failed / reverted -->
+<!-- Append one row per iteration. Status: improved / no-change / regression / failed / reverted
+     Every 5 iterations: append a progress snapshot (baseline, current best, confirmed bottlenecks, remaining hypotheses). -->
 
 | Iter | Title | Score | Passed | Latency(mean) | Status | Bottleneck |
 |------|-------|-------|--------|---------------|--------|------------|
 
 ## Rejected Paths
 
-<!-- Record approaches that were tried and abandoned, so they are not retried.
+<!-- Record approaches that are genuinely dead ends, so they are not retried.
+     Be careful: a partial regression (e.g., some workload groups slower) may mean the approach
+     needs tuning, not that it should be abandoned. Check per-group breakdown before rejecting.
 - **What:** [approach description]
 - **Result:** [what happened]
 - **Why it failed:** [root cause analysis]
@@ -20,14 +23,12 @@
 
 <!-- For rapid parameter tuning (block sizes, num_warps, num_stages, etc.), use this
      compact format instead of full iteration entries. One row per experiment.
-     Promote the best result to the Summary table as a normal iteration when the sweep concludes. -->
+     Promote the best result to the Summary table when the sweep concludes. -->
 
 | # | Parameter | Values tried | Best | Score | Latency(mean) | Notes |
 |---|-----------|-------------|------|-------|---------------|-------|
 
 ## Iterations
-
-<!-- For each iteration, fill in ALL sections. Do NOT skip Expected vs Actual. -->
 
 <!-- Template — copy for each new iteration:
 
@@ -55,7 +56,7 @@
   - Register spill: yes/no
   - Key stalls: ___
 
-- **Expected vs Actual:**
+- **Expected vs Actual:** Do NOT skip this field.
   - Predicted: [what you expected]
   - Got: [what actually happened]
   - Gap: [why the prediction was wrong, if it was]
