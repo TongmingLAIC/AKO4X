@@ -241,7 +241,6 @@ def render_template(task_text, placeholders):
     block_keys = {
         "{{OBJECTIVE}}",
         "{{SHAPE_SUMMARY}}", "{{WORKLOAD_SUMMARY}}",
-        "{{LOGGING_PROTOCOL}}",
     }
     inline_keys = [
         "{{OPERATOR_DESCRIPTION}}", "{{OPERATOR}}",
@@ -551,7 +550,7 @@ def main():
     fragments_dir = PARENT_DIR / "templates" / "fragments"
     objective_raw = read_fragment(fragments_dir / f"objective-{args.mode}.md")
     # profiler-guide.md no longer inlined — referenced via docs/profiler/ncu.md pointer in task.md
-    logging_protocol = read_fragment(fragments_dir / "logging-protocol.md") if args.trace else ""
+    # logging-protocol.md retired — execution protocol merged into task.md Workflow section
 
     # Pre-pass: substitute inline placeholders in objective fragment
     inline_vars = {
@@ -573,7 +572,6 @@ def main():
     )
     placeholders = {
         "{{OBJECTIVE}}": objective,
-        "{{LOGGING_PROTOCOL}}": logging_protocol,
         "{{SHAPE_SUMMARY}}": ctx["shape_summary"],
         "{{WORKLOAD_SUMMARY}}": ctx["workload_summary"],
         "{{OPERATOR}}": operator,
