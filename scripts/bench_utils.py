@@ -95,11 +95,19 @@ def get_trace_set_path() -> str:
     return path
 
 
-def build_bench_trace_set(trace_set_path: str, solution: Solution, max_workloads: int = 0) -> TraceSet:
+def build_bench_trace_set(
+    trace_set_path: str,
+    solution: Solution,
+    max_workloads: int = 0,
+    group_axis: str = "",
+    group_values: list | None = None,
+) -> TraceSet:
     """Load trace set and build a single-operator benchmark TraceSet.
 
     Args:
         max_workloads: If > 0, only include the first N workloads (for quick testing).
+        group_axis: Axis name for group filtering (e.g. "num_experts").
+        group_values: If set, only include workloads whose group_axis value is in this list.
     """
     trace_set = TraceSet.from_path(trace_set_path)
 
@@ -111,6 +119,15 @@ def build_bench_trace_set(trace_set_path: str, solution: Solution, max_workloads
 
     if not workloads:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
+
+    if group_values and group_axis:
+        group_set = set(group_values)
+        workloads = [w for w in workloads if w.workload.axes.get(group_axis) in group_set]
+        if not workloads:
+            raise ValueError(
+                f"No workloads match {group_axis} in {{{', '.join(str(v) for v in group_values)}}}. "
+                f"Check available values in docs/workloads.jsonl."
+            )
 
     if max_workloads > 0:
         workloads = workloads[:max_workloads]
@@ -405,6 +422,7 @@ def run_and_report(
     backend: str = "local",
     quiet: bool = False,
     max_workloads: int = 0,
+    group_values: list | None = None,
 ):
     """Two-phase benchmark orchestration shared by local and modal runners.
 
@@ -417,10 +435,18 @@ def run_and_report(
         backend: Backend name for trajectory metadata.
         max_workloads: If > 0, only benchmark the first N workloads (quick test mode).
                        Partial results are NOT saved to baseline cache.
+        group_values: If set, only benchmark workloads matching these group axis values.
+                      Partial results are NOT saved to baseline cache.
     """
-    quick_mode = max_workloads > 0
+    quick_mode = max_workloads > 0 or bool(group_values)
     if quick_mode and not quiet:
-        print(f"\n*** Quick test mode: running first {max_workloads} workload(s) only ***")
+        parts = []
+        if max_workloads > 0:
+            parts.append(f"first {max_workloads} workload(s)")
+        if group_values:
+            axis = find_group_axis()
+            parts.append(f"{axis}={','.join(str(v) for v in group_values)}")
+        print(f"\n*** Quick test mode: {' + '.join(parts)} ***")
 
     baseline = None if force_baseline else load_baseline()
     baseline_was_cached = baseline is not None

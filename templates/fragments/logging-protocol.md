@@ -45,6 +45,14 @@ Append to the end of ITERATIONS.md:
 - Biggest remaining opportunity: [where to focus next]
 ```
 
+### Iteration Scale
+
+Not all code changes require the same level of documentation:
+
+- **Full iteration** (architecture/algorithm changes): Fill all fields in the iteration template — hypothesis, expected outcome, belief update, etc.
+- **Micro experiment** (single parameter change, block size tuning): Use the **Parameter Sweeps** table in ITERATIONS.md — one row per experiment, no hypothesis/belief-update required.
+- Rule of thumb: if you're changing ≤2 numeric constants and the approach is the same, it's a micro experiment. Promote the best result to the Summary table when the sweep concludes.
+
 ### Rules
 
 - Keep each field in ITERATIONS.md to 1-2 sentences — this is an audit trail, not an essay

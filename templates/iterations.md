@@ -16,6 +16,15 @@
 - **Lesson:** [what this tells you about the kernel]
 -->
 
+## Parameter Sweeps
+
+<!-- For rapid parameter tuning (block sizes, num_warps, num_stages, etc.), use this
+     compact format instead of full iteration entries. One row per experiment.
+     Promote the best result to the Summary table as a normal iteration when the sweep concludes. -->
+
+| # | Parameter | Values tried | Best | Score | Latency(mean) | Notes |
+|---|-----------|-------------|------|-------|---------------|-------|
+
 ## Iterations
 
 <!-- For each iteration, fill in ALL sections. Do NOT skip Expected vs Actual. -->

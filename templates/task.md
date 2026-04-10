@@ -54,7 +54,9 @@ Compiles, checks correctness, and measures latency automatically.
 - `bash scripts/bench.sh --label "description"` — saves snapshot to `trajectory/`.
 - `bash scripts/bench.sh -q` — only prints score, per-group speedup, and latency.
 - `bash scripts/bench.sh --first 1` — quick test: only run 1 workload for fast compile/correctness checks (does not cache baseline).
+- `bash scripts/bench.sh --group 8` — only run workloads matching group axis value 8 (comma-separated for multiple: `--group 8,16`).
 - `timeout 600 bash scripts/bench.sh` — use a timeout, especially on first run.
+- Inputs are regenerated each call — do not cache value-dependent intermediates across invocations (see `docs/benchmark.md` § Input Behavior).
 
 Read `docs/benchmark.md` for scoring, baseline caching, iteration tuning, and troubleshooting.
 

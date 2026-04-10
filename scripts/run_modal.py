@@ -62,7 +62,13 @@ image = (
 
 
 @app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
-def run_benchmark(solution: Solution, config: BenchmarkConfig = None, max_workloads: int = 0) -> dict:
+def run_benchmark(
+    solution: Solution,
+    config: BenchmarkConfig = None,
+    max_workloads: int = 0,
+    group_axis: str = "",
+    group_values: list = None,
+) -> dict:
     """Run benchmark on Modal GPU and return results."""
     from flashinfer_bench.bench.benchmark import Benchmark as _Benchmark
 
@@ -74,19 +80,34 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None, max_worklo
     _sys.path.insert(0, "/root/project/scripts")
     from bench_utils import build_bench_trace_set, extract_results
 
-    bench_trace_set = build_bench_trace_set(TRACE_SET_PATH, solution, max_workloads=max_workloads)
+    bench_trace_set = build_bench_trace_set(
+        TRACE_SET_PATH, solution,
+        max_workloads=max_workloads, group_axis=group_axis, group_values=group_values,
+    )
     benchmark = _Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
     return extract_results(result_trace_set, solution.definition)
 
 
 @app.local_entrypoint()
-def main(label: str = None, force_baseline: bool = False, quiet: bool = False, first: int = 0):
+def main(label: str = None, force_baseline: bool = False, quiet: bool = False, first: int = 0, group: str = None):
     """Pack solution and run benchmark on Modal GPU, with trajectory tracking."""
     from functools import partial
 
-    from scripts.bench_utils import run_and_report
+    from scripts.bench_utils import find_group_axis, run_and_report
     from scripts.pack_solution import pack_solution
+
+    # Parse --group into axis name + values
+    group_axis = ""
+    group_values = None
+    if group:
+        group_axis = find_group_axis()
+        if not group_axis:
+            import sys as _sys
+            print("ERROR: --group requires a variable axis in definition.json, but none found.",
+                  file=_sys.stderr)
+            _sys.exit(1)
+        group_values = [int(v.strip()) for v in group.split(",")]
 
     if not quiet:
         print("Packing solution from source files...")
@@ -98,7 +119,8 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False, f
     if not quiet:
         print(f"Loaded: {solution.name} ({solution.definition})")
 
-    run_fn = partial(run_benchmark.remote, max_workloads=first) if first else run_benchmark.remote
+    run_fn = partial(run_benchmark.remote, max_workloads=first,
+                     group_axis=group_axis, group_values=group_values)
     run_and_report(
         solution, run_fn,
         force_baseline=force_baseline,
@@ -106,4 +128,5 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False, f
         backend=f"modal-{_GPU_TYPE.lower()}",
         quiet=quiet,
         max_workloads=first,
+        group_values=group_values,
     )

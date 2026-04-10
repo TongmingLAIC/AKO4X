@@ -8,6 +8,14 @@ The score is a **tracking metric**, not an optimization target. Because the refe
 
 The score is still useful for tracking progress between runs because the reference latency is cached (see below), so speedup changes reflect real solution improvements.
 
+## Input Behavior
+
+Workload inputs are regenerated on each `run()` call — tensors passed to your kernel are fresh random data every invocation. This means:
+
+- Do **not** cache intermediate results across calls (e.g., pre-computed indices, transposed weights, routing tables).
+- Module-level state that depends on input **values** will be stale on the next call.
+- You **may** cache structures that depend only on **shapes** (e.g., grid dimensions, block size selection, pre-allocated output buffers).
+
 ## Baseline Cache
 
 The first benchmark run profiles the reference implementation and saves results to `baseline.json`. Subsequent runs skip reference profiling and reuse the cache.
@@ -46,18 +54,32 @@ use_isolated_runner = true # run each workload in an isolated process
 - **`solution_iterations`** can stay at 100. Optimized kernels launch few CUDA ops, so profiling is fast.
 - **Trim workloads** if benchmarking is still too slow: remove redundant entries from `docs/workloads.jsonl`. Workloads within the same group (same parameter values) are interchangeable — keeping fewer per group speeds up benchmarking without losing coverage.
 
-## Quick Test Mode
+## Workload Filtering
 
-Use `--first N` to run only the first N workloads for fast iteration:
+Use `--first N` and/or `--group VALUES` to run a subset of workloads for fast iteration.
+
+**Both modes skip baseline caching** — partial results are not saved to `baseline.json`.
+
+### `--first N` — Quick test
 
 ```bash
 bash scripts/bench.sh --first 1 --label "debug"   # single workload, fast compile check
 bash scripts/bench.sh --first 3                     # first 3 workloads
 ```
 
-- Useful for quickly validating that your kernel compiles and produces correct output before running the full suite.
-- **Does not cache baseline** — avoids overwriting a valid full baseline with partial results.
-- Trajectory is still saved, so you can inspect `results.json` for error details.
+Useful for quickly validating that your kernel compiles and produces correct output.
+
+### `--group VALUES` — Filter by group axis
+
+```bash
+bash scripts/bench.sh --group 8                    # only workloads where group axis = 8
+bash scripts/bench.sh --group 8,16                 # group axis = 8 or 16
+bash scripts/bench.sh --group 8 --first 2          # first 2 workloads from group 8
+```
+
+Filters workloads by the variable axis (the axis that varies across workload groups, e.g. `num_experts`, `seq_len`). Use this to target specific workload sizes without running the full suite.
+
+Trajectory is still saved for both modes, so you can inspect `results.json` for error details.
 
 ## Error Diagnostics
 
