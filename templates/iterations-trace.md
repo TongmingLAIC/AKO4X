@@ -21,9 +21,10 @@
 
 ## Parameter Sweeps
 
-<!-- For rapid parameter tuning (block sizes, num_warps, num_stages, etc.), use this
-     compact format instead of full iteration entries. One row per experiment.
-     Promote the best result to the Summary table when the sweep concludes. -->
+<!-- When tuning a single parameter (block size, num_warps, num_stages, etc.) with
+     the same algorithmic approach: use this table. One row per experiment — NO summary
+     row or detail entry needed. When the sweep concludes, promote the best config to
+     the Summary table as one combined iteration (e.g. "sweep: BLOCK_M best=64"). -->
 
 | # | Parameter | Values tried | Best | Score | Latency(mean) | Notes |
 |---|-----------|-------------|------|-------|---------------|-------|

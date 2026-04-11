@@ -50,6 +50,8 @@ bash scripts/profile.sh --index 0,3,5 --launches  # batch launch summary
    2. Modify kernel
    3. `bash scripts/bench.sh --label "iter-N description"`
    4. Update `ITERATIONS.md` — **hooks block further edits and bench runs until this is done**
+      - Architectural change → summary row + detail entry
+      - Parameter tuning (block size, num_warps, etc.) → Parameter Sweeps row only
    5. Git commit: `bench(<score>): <one-line description>`
 4. **When stuck or uncertain** — investigate before the next code change:
    - Profile: `bash scripts/profile.sh --index <N> --launches` for launch overview, `--index <N>` for deep NCU
