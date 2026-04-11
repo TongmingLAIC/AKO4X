@@ -1,65 +1,96 @@
-# NCU Profiler Reference
+# Profiler Reference
 
-NVIDIA Nsight Compute (NCU) profiles individual GPU kernels to reveal performance bottlenecks.
-Use it to guide optimization after identifying slow workloads with `bench.sh`.
+Two profiling modes: **`--launches`** for quick kernel launch overview, **NCU** for deep per-kernel analysis.
 
-## When to Profile
+## When to Use Each Mode
 
-Don't profile routinely — profile when benchmark results alone don't explain performance. Get correctness first: all workloads must PASS before profiling is useful.
+| Mode | Use When | Speed |
+|------|----------|-------|
+| `--launches` | Launch overhead diagnosis, kernel count, timing distribution | Fast (single pass) |
+| NCU (default) | Memory vs compute bottleneck, occupancy, warp stalls | Slow (kernel replay) |
 
-**Profile when:**
-
-1. **Speedup has plateaued.** You made 2–3 optimization attempts with little or no improvement. Profiling reveals whether you are targeting the right bottleneck (memory vs compute vs launch overhead).
-2. **A workload group is disproportionately slow.** The per-group breakdown from `bench.sh` shows one group lagging behind others. Profile a representative workload from that group to understand what makes it different.
-3. **You need to choose between optimization strategies.** You suspect a kernel is memory-bound but aren't sure. Profiling confirms the bottleneck category so you invest effort in the right direction.
-4. **After a major architectural change.** New tiling scheme, different algorithm, or language switch — profile to understand the new performance characteristics before micro-optimizing.
-5. **Unexpected regression.** A change that should have improved performance made it worse. Profile before and after to find what regressed.
+**Start with `--launches`** to see the big picture (how many kernels, which ones dominate). Switch to NCU only when you need hardware-counter-level detail on a specific kernel.
 
 **Skip profiling when:**
 
 - The kernel isn't correct yet — fix FAILED workloads first.
 - You haven't read the bench output yet — per-workload and per-group breakdowns often tell you what to try next without profiling.
 
-## Command Reference
+## Kernel Launch Summary (`--launches`)
+
+Uses `torch.profiler` to trace CUDA activity in a single pass. Shows kernel names, call counts, and CUDA timing — much faster than NCU.
 
 ```bash
-# List workloads with indices
-bash scripts/profile.sh --list
+# Launch summary for a single workload
+bash scripts/profile.sh --index 5 --launches
 
-# Profile a workload (detailed metrics, formatted output)
-bash scripts/profile.sh <index>
+# Batch: compare launch patterns across workloads
+bash scripts/profile.sh --index 0,3,5 --launches
+bash scripts/profile.sh --index 0-4 --launches
+
+# Filter workloads by group axis
+bash scripts/profile.sh --index 0-18 --launches --exclude-group 1,14107
+```
+
+**Reading the output:**
+- **Total CUDA kernel launches** — high count (50+) suggests launch overhead; consider fusing kernels.
+- **Per-kernel CUDA time** — sorted by total time. If one kernel dominates (>80%), focus optimization there. If many small kernels share time, launch overhead is the bottleneck.
+
+## NCU Deep Profile (default)
+
+NVIDIA Nsight Compute replays each kernel to collect hardware performance counters.
+
+```bash
+# NCU profile (detailed metrics, formatted output)
+bash scripts/profile.sh --index 5
 
 # Full metrics collection (slower, more data)
-bash scripts/profile.sh <index> --set full
+bash scripts/profile.sh --index 5 --set full
 
 # Raw machine-readable output (for parsing)
-bash scripts/profile.sh <index> --page raw
+bash scripts/profile.sh --index 5 --page raw
 
 # Source-correlated counters (maps metrics to source lines)
-bash scripts/profile.sh <index> --page source
+bash scripts/profile.sh --index 5 --page source
 
 # Filter by kernel name (full-match regex; use .*name.* for substring)
-bash scripts/profile.sh <index> --kernel-name "my_kernel"
+bash scripts/profile.sh --index 5 --kernel-name "my_kernel"
 
 # Combine options
-bash scripts/profile.sh <index> --set full --page raw --kernel-name ".*gemm.*"
+bash scripts/profile.sh --index 5 --set full --page raw --kernel-name ".*gemm.*"
 
 # List available NCU sets and sections
 bash scripts/profile.sh --ncu-options
 
 # Increase timeout for complex kernels (default: 60s)
-bash scripts/profile.sh <index> --timeout 120
+bash scripts/profile.sh --index 5 --timeout 120
 
 # Limit output length
-bash scripts/profile.sh <index> --max-lines 200
+bash scripts/profile.sh --index 5 --max-lines 200
+```
+
+## Workload Selection
+
+All profiling modes share the same workload filters (same syntax as `bench.sh`):
+
+```bash
+bash scripts/profile.sh --list                          # list all workloads
+bash scripts/profile.sh --list --exclude-group 1,14107   # filtered list
+bash scripts/profile.sh --index 5                       # single workload
+bash scripts/profile.sh --index 0,3,5                   # multiple workloads
+bash scripts/profile.sh --index 2-8                      # range
+bash scripts/profile.sh --index 0-18 --group 32-901      # combined filters
 ```
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `<index>` | (required) | Workload index from `--list` |
+| `--index` | (required) | Workload indices (e.g. `5`, `0,3,5`, `2-8`) |
 | `--list` | — | Print workload table with indices |
+| `--launches` | — | Quick kernel launch summary (torch.profiler) |
+| `--group` | (all) | Filter by group axis values (e.g. `8,16` or `32-901`) |
+| `--exclude-group` | (none) | Exclude by group axis values |
 | `--ncu-options` | — | List available NCU section sets and sections |
 | `--set` | `detailed` | NCU section set: `basic`, `detailed`, `full`, etc. |
 | `--page` | `details` | Output format: `details`, `raw`, or `source` |

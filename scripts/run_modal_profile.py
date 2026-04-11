@@ -1,14 +1,14 @@
 """
-FlashInfer-Bench NCU Profiler Runner (Modal Backend).
+FlashInfer-Bench Profiler Runner (Modal Backend).
 
-Profiles a solution on a specific workload using NVIDIA Nsight Compute (NCU)
-on a Modal cloud GPU. Reuses pack_solution() to build Solution objects and
-the flashinfer-bench NCU agent API.
+Profiles a solution on specific workloads using NVIDIA Nsight Compute (NCU)
+or lightweight torch.profiler for kernel launch analysis on Modal cloud GPU.
 
 Usage:
     modal run scripts/run_modal_profile.py --list
-    modal run scripts/run_modal_profile.py --workload-index 0
-    modal run scripts/run_modal_profile.py --workload-index 0 --set full --page raw
+    modal run scripts/run_modal_profile.py --index 0
+    modal run scripts/run_modal_profile.py --index 0 --set full --page raw
+    modal run scripts/run_modal_profile.py --index 0,3,5 --launches
 """
 
 import json
@@ -56,7 +56,7 @@ image = (
 
 
 # ---------------------------------------------------------------------------
-# Modal remote function
+# Modal remote functions
 # ---------------------------------------------------------------------------
 
 @app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
@@ -71,12 +71,62 @@ def run_ncu_remote(solution: Solution, workload: Workload, ncu_kwargs: dict) -> 
     )
 
 
+@app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
+def run_launches_remote(solution: Solution, workload: Workload) -> str:
+    """Run torch.profiler inside Modal container and return kernel launch summary."""
+    import torch
+    from torch.profiler import ProfilerActivity, profile
+
+    from flashinfer_bench import TraceSet
+    from flashinfer_bench.bench.evaluators.utils import allocate_outputs
+    from flashinfer_bench.bench.utils import gen_inputs
+    from flashinfer_bench.compile import BuilderRegistry
+
+    trace_set = TraceSet.from_path(TRACE_SET_PATH)
+    definition = trace_set.definitions[solution.definition]
+
+    registry = BuilderRegistry.get_instance()
+    runnable = registry.build(definition, solution)
+
+    device = "cuda:0"
+    inputs = gen_inputs(definition, workload, device)
+    outputs = allocate_outputs(definition, inputs, device)
+
+    # Warmup
+    with torch.no_grad():
+        runnable.call_destination_passing(*inputs, *outputs)
+    torch.cuda.synchronize()
+
+    # Regenerate for profiling run
+    inputs = gen_inputs(definition, workload, device)
+    outputs = allocate_outputs(definition, inputs, device)
+
+    with profile(activities=[ProfilerActivity.CUDA], record_shapes=True) as prof:
+        with torch.no_grad():
+            runnable.call_destination_passing(*inputs, *outputs)
+        torch.cuda.synchronize()
+
+    events = prof.key_averages()
+    cuda_events = [e for e in events if e.self_cuda_time_total > 0]
+    total_launches = sum(e.count for e in cuda_events)
+    total_cuda_us = sum(e.self_cuda_time_total for e in cuda_events)
+
+    lines = []
+    lines.append(f"Total CUDA kernel launches: {total_launches}")
+    lines.append(f"Total CUDA time: {total_cuda_us / 1000:.3f} ms")
+    lines.append("")
+    lines.append(events.table(sort_by="cuda_time_total", row_limit=50))
+
+    runnable.cleanup()
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
 
 def _load_config():
-    """Load operator name from config.toml."""
+    """Load config from config.toml."""
     config_path = PROJECT_ROOT / "config.toml"
     if not config_path.exists():
         sys.exit("Error: config.toml not found")
@@ -98,15 +148,38 @@ def _load_workloads_jsonl():
     return workloads
 
 
-def _list_workloads():
-    """Print workload table with indices."""
-    config = _load_config()
-    operator = config["solution"]["definition"]
-    workloads = _load_workloads_jsonl()
-    print(f"Workloads for '{operator}' ({len(workloads)} total):\n")
+def _filter_workloads(entries, indices=None, group_values=None, exclude_group_values=None):
+    """Filter workloads by index and group axis. Returns list of (original_index, entry)."""
+    from scripts.bench_utils import find_group_axis
+    group_axis = find_group_axis() if (group_values or exclude_group_values) else ""
+
+    indexed = list(enumerate(entries))
+
+    if indices is not None:
+        index_set = set(indices)
+        indexed = [(i, e) for i, e in indexed if i in index_set]
+
+    if group_values and group_axis:
+        group_set = set(group_values)
+        indexed = [(i, e) for i, e in indexed if e["workload"]["axes"].get(group_axis) in group_set]
+
+    if exclude_group_values and group_axis:
+        exclude_set = set(exclude_group_values)
+        indexed = [(i, e) for i, e in indexed if e["workload"]["axes"].get(group_axis) not in exclude_set]
+
+    return indexed
+
+
+def _list_workloads(entries, indices=None, group_values=None, exclude_group_values=None):
+    """Print workload table with indices, optionally filtered."""
+    indexed = _filter_workloads(entries, indices, group_values, exclude_group_values)
+    total = len(entries)
+    shown = len(indexed)
+    label = f" (filtered {shown}/{total})" if shown < total else ""
+    print(f"Workloads ({total} total{label}):\n")
     print(f"{'Index':<7} {'UUID':<12} {'Axes'}")
     print(f"{'-----':<7} {'----':<12} {'----'}")
-    for i, entry in enumerate(workloads):
+    for i, entry in indexed:
         wl = entry["workload"]
         uuid_prefix = wl["uuid"][:8]
         axes_str = ", ".join(f"{k}={v}" for k, v in sorted(wl["axes"].items()))
@@ -133,8 +206,9 @@ def _list_ncu_options():
 
 @app.local_entrypoint()
 def main(
-    workload_index: int = -1,
+    index: str = None,
     list: bool = False,
+    launches: bool = False,
     ncu_options: bool = False,
     set: str = "detailed",
     page: str = "details",
@@ -142,36 +216,43 @@ def main(
     sections: str = "",
     timeout: int = 60,
     max_lines: int = -1,
+    group: str = None,
+    exclude_group: str = None,
 ):
-    """NCU profiler — profile a solution on a specific workload via Modal."""
+    """Profiler — NCU or kernel launch summary for specific workloads via Modal."""
     import os
 
-    if list:
-        _list_workloads()
-        return
+    from scripts.bench_utils import parse_int_filter
+
+    # Parse filter values
+    indices = parse_int_filter(index) if index else None
+    group_values = parse_int_filter(group) if group else None
+    exclude_group_values = parse_int_filter(exclude_group) if exclude_group else None
 
     if ncu_options:
         _list_ncu_options()
         return
 
-    if workload_index < 0:
-        print("Usage: modal run scripts/run_modal_profile.py --workload-index <index>")
+    if list:
+        entries = _load_workloads_jsonl()
+        _list_workloads(entries, indices, group_values, exclude_group_values)
+        return
+
+    if index is None:
+        print("Usage: modal run scripts/run_modal_profile.py --index <N>")
+        print("       modal run scripts/run_modal_profile.py --index <N> --launches")
         print("       modal run scripts/run_modal_profile.py --list")
         print("       modal run scripts/run_modal_profile.py --ncu-options")
         sys.exit(1)
 
-    # Isolate Triton JIT cache to this project
     os.environ.setdefault("TRITON_CACHE_DIR", str(PROJECT_ROOT / ".triton_cache"))
 
-    # Load workloads
-    workloads = _load_workloads_jsonl()
-    if workload_index >= len(workloads):
-        print(f"Error: Workload index {workload_index} out of range [0, {len(workloads) - 1}]",
-              file=sys.stderr)
+    # Load and filter workloads
+    entries = _load_workloads_jsonl()
+    indexed = _filter_workloads(entries, indices, group_values, exclude_group_values)
+    if not indexed:
+        print("Error: No workloads match the specified filters.", file=sys.stderr)
         sys.exit(1)
-
-    wl_entry = workloads[workload_index]
-    workload = Workload.model_validate(wl_entry["workload"])
 
     # Pack solution
     from scripts.pack_solution import pack_solution
@@ -180,43 +261,52 @@ def main(
     solution_path = pack_solution()
     solution = Solution.model_validate_json(solution_path.read_text())
 
-    axes_str = ", ".join(f"{k}={v}" for k, v in sorted(workload.axes.items()))
-    print(f"\nProfiling workload {workload_index}: {workload.uuid[:8]}...")
-    print(f"  Axes: {axes_str}")
-    print(f"  Set: {set}, Page: {page}")
-    print(f"  GPU: {_GPU_TYPE}")
-    if kernel_name:
-        print(f"  Kernel filter: {kernel_name}")
-    print()
+    for idx, wl_entry in indexed:
+        workload = Workload.model_validate(wl_entry["workload"])
+        axes_str = ", ".join(f"{k}={v}" for k, v in sorted(workload.axes.items()))
 
-    # Build NCU kwargs
-    ncu_kwargs = {"set": set, "page": page, "timeout": timeout}
-    if kernel_name:
-        ncu_kwargs["kernel_name"] = kernel_name
-    if sections:
-        ncu_kwargs["sections"] = [s.strip() for s in sections.split(",")]
-    if max_lines > 0:
-        ncu_kwargs["max_lines"] = max_lines
+        if launches:
+            print(f"\n{'=' * 60}")
+            print(f"Workload {idx}: {workload.uuid[:8]}  ({axes_str})")
+            print(f"{'=' * 60}")
 
-    # Run on Modal
-    result = run_ncu_remote.remote(solution, workload, ncu_kwargs)
-    print(result)
+            result = run_launches_remote.remote(solution, workload)
+            print(result)
+        else:
+            print(f"\nProfiling workload {idx}: {workload.uuid[:8]}...")
+            print(f"  Axes: {axes_str}")
+            print(f"  Set: {set}, Page: {page}")
+            print(f"  GPU: {_GPU_TYPE}")
+            if kernel_name:
+                print(f"  Kernel filter: {kernel_name}")
+            print()
 
-    # Auto-save profile output
-    profiles_dir = PROJECT_ROOT / "profiles"
-    profiles_dir.mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    profile_data = {
-        "timestamp": datetime.now().isoformat(),
-        "workload_index": workload_index,
-        "workload_uuid": workload.uuid,
-        "axes": dict(workload.axes),
-        "ncu_set": set,
-        "ncu_page": page,
-        "kernel_filter": kernel_name or None,
-        "backend": f"modal-{_GPU_TYPE.lower()}",
-        "output": result,
-    }
-    profile_path = profiles_dir / f"w{workload_index}_{timestamp}.json"
-    profile_path.write_text(json.dumps(profile_data, indent=2))
-    print(f"\nProfile saved to: {profile_path}", file=sys.stderr)
+            ncu_kwargs = {"set": set, "page": page, "timeout": timeout}
+            if kernel_name:
+                ncu_kwargs["kernel_name"] = kernel_name
+            if sections:
+                ncu_kwargs["sections"] = [s.strip() for s in sections.split(",")]
+            if max_lines > 0:
+                ncu_kwargs["max_lines"] = max_lines
+
+            result = run_ncu_remote.remote(solution, workload, ncu_kwargs)
+            print(result)
+
+            # Auto-save NCU profile output
+            profiles_dir = PROJECT_ROOT / "profiles"
+            profiles_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            profile_data = {
+                "timestamp": datetime.now().isoformat(),
+                "workload_index": idx,
+                "workload_uuid": workload.uuid,
+                "axes": dict(workload.axes),
+                "ncu_set": set,
+                "ncu_page": page,
+                "kernel_filter": kernel_name or None,
+                "backend": f"modal-{_GPU_TYPE.lower()}",
+                "output": result,
+            }
+            profile_path = profiles_dir / f"w{idx}_{timestamp}.json"
+            profile_path.write_text(json.dumps(profile_data, indent=2))
+            print(f"\nProfile saved to: {profile_path}", file=sys.stderr)

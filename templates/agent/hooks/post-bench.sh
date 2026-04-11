@@ -15,7 +15,7 @@ Hooks enforce the following before your next code change:
   1. Update ITERATIONS.md (summary row + detail entry or parameter sweep row)
   2. git commit: bench(<score>): <description>
 If scores have stalled for several iterations, consider BEFORE next code change:
-  → Profile: bash scripts/profile.sh <index>  (identify bottleneck)
+  → Profile: bash scripts/profile.sh --index <N> --launches  (identify bottleneck)
   → Search: WebSearch for optimization patterns, API docs, hardware specs
 Editing solution/ or re-running bench.sh is BLOCKED until ITERATIONS.md is updated.
 ══════════════════════════
