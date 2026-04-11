@@ -21,6 +21,7 @@ from scripts.bench_utils import (
     extract_results,
     find_group_axis,
     get_trace_set_path,
+    parse_int_filter,
     run_and_report,
 )
 from scripts.pack_solution import pack_solution
@@ -32,12 +33,15 @@ def run_benchmark(
     max_workloads: int = 0,
     group_axis: str = "",
     group_values: list | None = None,
+    exclude_group_values: list | None = None,
+    workload_indices: list | None = None,
 ) -> dict:
     """Run benchmark locally and return results."""
     trace_set_path = get_trace_set_path()
     bench_trace_set = build_bench_trace_set(
         trace_set_path, solution,
         max_workloads=max_workloads, group_axis=group_axis, group_values=group_values,
+        exclude_group_values=exclude_group_values, workload_indices=workload_indices,
     )
     benchmark = Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
@@ -56,21 +60,33 @@ def main():
     parser.add_argument("--first", type=int, default=0, metavar="N",
                         help="Only run first N workloads (quick test mode, does not cache baseline)")
     parser.add_argument("--group", type=str, default=None, metavar="VALUES",
-                        help="Only run workloads matching group axis values (comma-separated, e.g. --group 8,16)")
+                        help="Only run workloads matching group axis values (comma-separated or range, e.g. --group 8,16 or --group 32-901)")
+    parser.add_argument("--exclude-group", type=str, default=None, metavar="VALUES",
+                        help="Exclude workloads matching group axis values (e.g. --exclude-group 1,14107)")
+    parser.add_argument("--index", type=str, default=None, metavar="INDICES",
+                        help="Only run specific workloads by index (e.g. --index 0,3,5 or --index 2-8)")
     args = parser.parse_args()
 
     label = args.label_flag or args.label
 
-    # Parse --group into axis name + values
+    # Parse group/exclude/index filters
     group_axis = ""
     group_values = None
-    if args.group:
+    exclude_group_values = None
+    workload_indices = None
+
+    if args.group or args.exclude_group:
         group_axis = find_group_axis()
         if not group_axis:
-            print("ERROR: --group requires a variable axis in definition.json, but none found.",
+            print("ERROR: --group/--exclude-group requires a variable axis in definition.json, but none found.",
                   file=sys.stderr)
             sys.exit(1)
-        group_values = [int(v.strip()) for v in args.group.split(",")]
+    if args.group:
+        group_values = parse_int_filter(args.group)
+    if args.exclude_group:
+        exclude_group_values = parse_int_filter(args.exclude_group)
+    if args.index:
+        workload_indices = parse_int_filter(args.index)
 
     # Isolate Triton JIT cache to this project
     os.environ.setdefault("TRITON_CACHE_DIR", str(PROJECT_ROOT / ".triton_cache"))
@@ -86,7 +102,9 @@ def main():
         print(f"Loaded: {solution.name} ({solution.definition})")
 
     run_fn = partial(run_benchmark, max_workloads=args.first,
-                     group_axis=group_axis, group_values=group_values)
+                     group_axis=group_axis, group_values=group_values,
+                     exclude_group_values=exclude_group_values,
+                     workload_indices=workload_indices)
     run_and_report(
         solution, run_fn,
         force_baseline=args.force_baseline,
@@ -95,6 +113,8 @@ def main():
         quiet=args.quiet,
         max_workloads=args.first,
         group_values=group_values,
+        exclude_group_values=exclude_group_values,
+        workload_indices=workload_indices,
     )
 
 

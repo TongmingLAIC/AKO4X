@@ -69,6 +69,8 @@ def run_benchmark(
     max_workloads: int = 0,
     group_axis: str = "",
     group_values: list = None,
+    exclude_group_values: list = None,
+    workload_indices: list = None,
 ) -> dict:
     """Run benchmark on Modal GPU and return results."""
     from flashinfer_bench.bench.benchmark import Benchmark as _Benchmark
@@ -84,6 +86,7 @@ def run_benchmark(
     bench_trace_set = build_bench_trace_set(
         TRACE_SET_PATH, solution,
         max_workloads=max_workloads, group_axis=group_axis, group_values=group_values,
+        exclude_group_values=exclude_group_values, workload_indices=workload_indices,
     )
     benchmark = _Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
@@ -91,24 +94,33 @@ def run_benchmark(
 
 
 @app.local_entrypoint()
-def main(label: str = None, force_baseline: bool = False, quiet: bool = False, first: int = 0, group: str = None):
+def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
+         first: int = 0, group: str = None, exclude_group: str = None, index: str = None):
     """Pack solution and run benchmark on Modal GPU, with trajectory tracking."""
     from functools import partial
 
-    from scripts.bench_utils import find_group_axis, run_and_report
+    from scripts.bench_utils import find_group_axis, parse_int_filter, run_and_report
     from scripts.pack_solution import pack_solution
 
-    # Parse --group into axis name + values
+    # Parse group/exclude/index filters
     group_axis = ""
     group_values = None
-    if group:
+    exclude_group_values = None
+    workload_indices = None
+
+    if group or exclude_group:
         group_axis = find_group_axis()
         if not group_axis:
             import sys as _sys
-            print("ERROR: --group requires a variable axis in definition.json, but none found.",
+            print("ERROR: --group/--exclude-group requires a variable axis in definition.json, but none found.",
                   file=_sys.stderr)
             _sys.exit(1)
-        group_values = [int(v.strip()) for v in group.split(",")]
+    if group:
+        group_values = parse_int_filter(group)
+    if exclude_group:
+        exclude_group_values = parse_int_filter(exclude_group)
+    if index:
+        workload_indices = parse_int_filter(index)
 
     if not quiet:
         print("Packing solution from source files...")
@@ -121,7 +133,9 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False, f
         print(f"Loaded: {solution.name} ({solution.definition})")
 
     run_fn = partial(run_benchmark.remote, max_workloads=first,
-                     group_axis=group_axis, group_values=group_values)
+                     group_axis=group_axis, group_values=group_values,
+                     exclude_group_values=exclude_group_values,
+                     workload_indices=workload_indices)
     run_and_report(
         solution, run_fn,
         force_baseline=force_baseline,
@@ -130,4 +144,6 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False, f
         quiet=quiet,
         max_workloads=first,
         group_values=group_values,
+        exclude_group_values=exclude_group_values,
+        workload_indices=workload_indices,
     )

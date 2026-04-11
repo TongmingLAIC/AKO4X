@@ -56,9 +56,7 @@ use_isolated_runner = true # run each workload in an isolated process
 
 ## Workload Filtering
 
-Use `--first N` and/or `--group VALUES` to run a subset of workloads for fast iteration.
-
-**Both modes skip baseline caching** — partial results are not saved to `baseline.json`.
+Use filters to run a subset of workloads for fast iteration. All filter modes skip baseline caching — partial results are not saved to `baseline.json`. Filters compose in order: `--index` → `--group` → `--exclude-group` → `--first`.
 
 ### `--first N` — Quick test
 
@@ -74,12 +72,32 @@ Useful for quickly validating that your kernel compiles and produces correct out
 ```bash
 bash scripts/bench.sh --group 8                    # only workloads where group axis = 8
 bash scripts/bench.sh --group 8,16                 # group axis = 8 or 16
+bash scripts/bench.sh --group 32-901               # group axis in range [32, 901]
+bash scripts/bench.sh --group 8,16,128-512         # mix of exact values and ranges
 bash scripts/bench.sh --group 8 --first 2          # first 2 workloads from group 8
 ```
 
 Filters workloads by the variable axis (the axis that varies across workload groups, e.g. `num_experts`, `seq_len`). Use this to target specific workload sizes without running the full suite.
 
-Trajectory is still saved for both modes, so you can inspect `results.json` for error details.
+### `--exclude-group VALUES` — Exclude by group axis
+
+```bash
+bash scripts/bench.sh --exclude-group 1,14107      # skip outlier workloads
+bash scripts/bench.sh --exclude-group 1-16          # skip small workloads
+```
+
+Excludes workloads matching the specified group axis values. Useful for ignoring edge-case workloads (e.g., very small or very large inputs) while benchmarking the typical range. Supports the same comma-separated and range syntax as `--group`.
+
+### `--index INDICES` — Select by workload index
+
+```bash
+bash scripts/bench.sh --index 0,3,5               # run workloads 0, 3, and 5
+bash scripts/bench.sh --index 2-8                   # run workloads 2 through 8
+```
+
+Selects specific workloads by their index in `docs/workloads.jsonl` (same indices shown by `bash scripts/profile.sh --list`). Useful when you know exactly which workloads to test.
+
+Trajectory is still saved for all filter modes, so you can inspect `results.json` for error details.
 
 ## Error Diagnostics
 

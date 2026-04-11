@@ -95,12 +95,34 @@ def get_trace_set_path() -> str:
     return path
 
 
+def parse_int_filter(raw: str) -> list[int]:
+    """Parse comma-separated integers with optional range syntax.
+
+    Examples: "8,16" -> [8,16], "32-901" -> [32..901], "8,16,32-64" -> [8,16,32..64]
+    """
+    result = []
+    for part in raw.split(","):
+        part = part.strip()
+        # Detect range: digits-digits (not a leading negative sign)
+        dash = part.find("-", 1)  # skip pos 0 to allow negative ints
+        if dash > 0:
+            lo, hi = int(part[:dash]), int(part[dash + 1:])
+            if lo > hi:
+                raise ValueError(f"Invalid range: {part} (start > end)")
+            result.extend(range(lo, hi + 1))
+        else:
+            result.append(int(part))
+    return sorted(set(result))
+
+
 def build_bench_trace_set(
     trace_set_path: str,
     solution: Solution,
     max_workloads: int = 0,
     group_axis: str = "",
     group_values: list | None = None,
+    exclude_group_values: list | None = None,
+    workload_indices: list | None = None,
 ) -> TraceSet:
     """Load trace set and build a single-operator benchmark TraceSet.
 
@@ -108,6 +130,8 @@ def build_bench_trace_set(
         max_workloads: If > 0, only include the first N workloads (for quick testing).
         group_axis: Axis name for group filtering (e.g. "num_experts").
         group_values: If set, only include workloads whose group_axis value is in this list.
+        exclude_group_values: If set, exclude workloads whose group_axis value is in this list.
+        workload_indices: If set, only include workloads at these indices (in the original list).
     """
     trace_set = TraceSet.from_path(trace_set_path)
 
@@ -120,6 +144,13 @@ def build_bench_trace_set(
     if not workloads:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
 
+    # Filter order: --index -> --group -> --exclude-group -> --first
+    if workload_indices is not None:
+        index_set = set(workload_indices)
+        workloads = [w for i, w in enumerate(workloads) if i in index_set]
+        if not workloads:
+            raise ValueError(f"No workloads match indices {sorted(index_set)}.")
+
     if group_values and group_axis:
         group_set = set(group_values)
         workloads = [w for w in workloads if w.workload.axes.get(group_axis) in group_set]
@@ -127,6 +158,15 @@ def build_bench_trace_set(
             raise ValueError(
                 f"No workloads match {group_axis} in {{{', '.join(str(v) for v in group_values)}}}. "
                 f"Check available values in docs/workloads.jsonl."
+            )
+
+    if exclude_group_values and group_axis:
+        exclude_set = set(exclude_group_values)
+        workloads = [w for w in workloads if w.workload.axes.get(group_axis) not in exclude_set]
+        if not workloads:
+            raise ValueError(
+                f"All workloads excluded by {group_axis} not in "
+                f"{{{', '.join(str(v) for v in exclude_group_values)}}}."
             )
 
     if max_workloads > 0:
@@ -423,6 +463,8 @@ def run_and_report(
     quiet: bool = False,
     max_workloads: int = 0,
     group_values: list | None = None,
+    exclude_group_values: list | None = None,
+    workload_indices: list | None = None,
 ):
     """Two-phase benchmark orchestration shared by local and modal runners.
 
@@ -437,15 +479,22 @@ def run_and_report(
                        Partial results are NOT saved to baseline cache.
         group_values: If set, only benchmark workloads matching these group axis values.
                       Partial results are NOT saved to baseline cache.
+        exclude_group_values: If set, exclude workloads matching these group axis values.
+        workload_indices: If set, only benchmark workloads at these indices.
     """
-    quick_mode = max_workloads > 0 or bool(group_values)
+    quick_mode = max_workloads > 0 or bool(group_values) or bool(exclude_group_values) or bool(workload_indices)
     if quick_mode and not quiet:
         parts = []
+        if workload_indices:
+            parts.append(f"indices {','.join(str(i) for i in workload_indices)}")
         if max_workloads > 0:
             parts.append(f"first {max_workloads} workload(s)")
         if group_values:
             axis = find_group_axis()
             parts.append(f"{axis}={','.join(str(v) for v in group_values)}")
+        if exclude_group_values:
+            axis = find_group_axis()
+            parts.append(f"excluding {axis}={','.join(str(v) for v in exclude_group_values)}")
         print(f"\n*** Quick test mode: {' + '.join(parts)} ***")
 
     baseline = None if force_baseline else load_baseline()

@@ -30,6 +30,9 @@ bash scripts/bench.sh --label "iter-N desc"    # with trajectory snapshot
 bash scripts/bench.sh -q                       # score + per-group summary only
 bash scripts/bench.sh --first 1                # quick compile/correctness check
 bash scripts/bench.sh --group 8,16             # filter by group axis values
+bash scripts/bench.sh --group 32-901           # filter by group axis range
+bash scripts/bench.sh --exclude-group 1,14107  # exclude specific group values
+bash scripts/bench.sh --index 0,3,5            # run specific workloads by index
 bash scripts/profile.sh --list                 # list workloads with indices
 bash scripts/profile.sh <index>                # NCU profile a specific workload
 ```
