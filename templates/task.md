@@ -37,6 +37,8 @@ bash scripts/profile.sh --list                 # list workloads with indices
 bash scripts/profile.sh --index 5              # NCU profile a specific workload
 bash scripts/profile.sh --index 5 --launches   # quick kernel launch summary
 bash scripts/profile.sh --index 0,3,5 --launches  # batch launch summary
+bash scripts/diff.sh                              # compare last two benchmark runs
+bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
 ```
 
 {{BASELINE_NOTE}}
