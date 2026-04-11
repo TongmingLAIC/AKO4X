@@ -6,9 +6,9 @@ on a Modal cloud GPU. Reuses pack_solution() to build Solution objects and
 the flashinfer-bench NCU agent API.
 
 Usage:
-    modal run scripts/run_modal_profile.py -- --list
-    modal run scripts/run_modal_profile.py -- 0
-    modal run scripts/run_modal_profile.py -- 0 --set full --page raw
+    modal run scripts/run_modal_profile.py --list
+    modal run scripts/run_modal_profile.py --workload-index 0
+    modal run scripts/run_modal_profile.py --workload-index 0 --set full --page raw
 """
 
 import json
@@ -155,9 +155,9 @@ def main(
         return
 
     if workload_index < 0:
-        print("Usage: modal run scripts/run_modal_profile.py -- <index>")
-        print("       modal run scripts/run_modal_profile.py -- --list")
-        print("       modal run scripts/run_modal_profile.py -- --ncu-options")
+        print("Usage: modal run scripts/run_modal_profile.py --workload-index <index>")
+        print("       modal run scripts/run_modal_profile.py --list")
+        print("       modal run scripts/run_modal_profile.py --ncu-options")
         sys.exit(1)
 
     # Isolate Triton JIT cache to this project

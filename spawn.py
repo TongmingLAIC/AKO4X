@@ -412,9 +412,9 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
             'cd "$(dirname "$0")/.." || exit 1\n'
             '# Translate positional index to --workload-index for Modal CLI compatibility\n'
             'if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then\n'
-            '  modal run scripts/run_modal_profile.py -- --workload-index "$@"\n'
+            '  modal run scripts/run_modal_profile.py --workload-index "$@"\n'
             'else\n'
-            '  modal run scripts/run_modal_profile.py -- "$@"\n'
+            '  modal run scripts/run_modal_profile.py "$@"\n'
             'fi\n'
         )
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
