@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flashinfer"
+version = "0.0.0"
+description = "Import-time shim that lets flashinfer_bench load on non-CUDA hosts (macOS) for Modal-backend orchestration only. Do NOT install on Linux."
+requires-python = ">=3.10"
+
+[tool.hatch.build.targets.wheel]
+packages = ["flashinfer"]

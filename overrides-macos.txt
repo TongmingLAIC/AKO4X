@@ -1,0 +1,27 @@
+# uv override file for installing AKO4FIB on macOS (Modal-backend workflows only).
+#
+# Usage:
+#     uv pip install --overrides AKO4FIB/overrides-macos.txt ./AKO4FIB
+#
+# Why this file exists:
+#   `flashinfer-bench` transitively pulls `flashinfer-python`, which pulls
+#   `nvidia-cudnn-frontend`, `cupti-python`, etc. None of those publish macOS
+#   wheels, so plain `uv pip install ./AKO4FIB` cannot resolve on Mac even
+#   though only orchestration code (modal client + flashinfer_bench pydantic
+#   models) actually runs locally when using `--backend modal`.
+#
+# What it does:
+#   Each line replaces the resolver's requirement for that package with a
+#   `sys_platform == 'linux'` marker, so the package is required on Linux
+#   (unchanged behavior) but dropped on every other platform.
+#
+# This file is NOT consumed by Linux installs. `pip install .` /
+# `uv pip install ./AKO4FIB` on Linux behave exactly as before.
+
+flashinfer-python ; sys_platform == 'linux'
+nvidia-cudnn-frontend ; sys_platform == 'linux'
+cupti-python ; sys_platform == 'linux'
+triton ; sys_platform == 'linux'
+cuda-python ; sys_platform == 'linux'
+nvidia-ml-py ; sys_platform == 'linux'
+torch-c-dlpack-ext ; sys_platform == 'linux'

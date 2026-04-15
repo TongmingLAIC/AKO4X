@@ -8,23 +8,28 @@ version = "0.1.0"
 description = "Scaffolding for GPU kernel optimization environments"
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.9.1",
-    "triton>=3.5.0",
-    "numpy>=1.24.0",
-    "cupti-python>=13.0.0",
-    "apache-tvm-ffi>=0.1.6,!=0.1.8,!=0.1.8.post0,<0.2",
-    "flashinfer-python @ git+https://github.com/flashinfer-ai/flashinfer.git@main",
+    # Cross-platform: needed by spawn.py / scripts orchestration on any host.
     "flashinfer-bench @ git+https://github.com/flashinfer-ai/flashinfer-bench.git@main",
-    "torch-c-dlpack-ext",
-    "cuda-python",
-    "nvidia-cudnn-frontend>=1.13.0",
-    "nvidia-ml-py",
+    "numpy>=1.24.0",
+    "apache-tvm-ffi>=0.1.6,!=0.1.8,!=0.1.8.post0,<0.2",
     "ninja",
     "packaging>=24.2",
     "einops",
     "tabulate",
     "tqdm",
     "click",
+    # torch has macOS arm64 wheels; keep unconditional so orchestration imports work.
+    "torch>=2.9.1",
+    # Linux + NVIDIA only. Needed by the local backend; the Modal backend installs
+    # these inside its container image. Gating by sys_platform keeps Linux installs
+    # identical while letting macOS hosts (Modal-only driving) install at all.
+    "triton>=3.5.0; sys_platform == 'linux'",
+    "cupti-python>=13.0.0; sys_platform == 'linux'",
+    "flashinfer-python @ git+https://github.com/flashinfer-ai/flashinfer.git@main ; sys_platform == 'linux'",
+    "torch-c-dlpack-ext; sys_platform == 'linux'",
+    "cuda-python; sys_platform == 'linux'",
+    "nvidia-cudnn-frontend>=1.13.0; sys_platform == 'linux'",
+    "nvidia-ml-py; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
