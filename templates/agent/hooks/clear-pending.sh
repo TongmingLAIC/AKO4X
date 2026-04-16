@@ -1,6 +1,6 @@
 #!/bin/bash
-# PostToolUse hook: clears .bench_pending marker when ITERATIONS.md is edited.
-# This unblocks solution/ edits and bench.sh for the next iteration.
+# PostToolUse hook: clears .bench_pending marker when ITERATIONS.md is modified.
+# Triggers from Edit, MultiEdit, or Write tools. This unblocks the next iteration.
 set -euo pipefail
 cat > /dev/null  # consume stdin
 

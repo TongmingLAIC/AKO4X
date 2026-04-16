@@ -430,6 +430,12 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
                 hook_file.chmod(0o755)
 
     # Generate .claude/settings.local.json (permissions + hooks)
+    # Hooks enforce the iteration protocol. Design:
+    #   - Only LABELED bench runs (--label "...") count as iterations.
+    #   - Smoke tests (--first/--index/--group without --label) and profile.sh
+    #     are always allowed.
+    #   - Failed runs (COMPILE_ERROR/INVALID) don't require logging.
+    # The `if` filter matches command text; gates compare against the tool_input.
     settings = {
         "permissions": agent_config["permissions"],
         "hooks": {
@@ -450,6 +456,22 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
                         "command": ".claude/hooks/clear-pending.sh",
                     }],
                 },
+                {
+                    "matcher": "Write",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Write(*ITERATIONS.md)",
+                        "command": ".claude/hooks/clear-pending.sh",
+                    }],
+                },
+                {
+                    "matcher": "MultiEdit",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "MultiEdit(*ITERATIONS.md)",
+                        "command": ".claude/hooks/clear-pending.sh",
+                    }],
+                },
             ],
             "PreToolUse": [
                 {
@@ -457,6 +479,22 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
                     "hooks": [{
                         "type": "command",
                         "if": "Edit(*/solution/*)",
+                        "command": ".claude/hooks/gate-solution-edit.sh",
+                    }],
+                },
+                {
+                    "matcher": "Write",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "Write(*/solution/*)",
+                        "command": ".claude/hooks/gate-solution-edit.sh",
+                    }],
+                },
+                {
+                    "matcher": "MultiEdit",
+                    "hooks": [{
+                        "type": "command",
+                        "if": "MultiEdit(*/solution/*)",
                         "command": ".claude/hooks/gate-solution-edit.sh",
                     }],
                 },
