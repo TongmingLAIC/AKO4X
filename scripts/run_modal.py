@@ -95,11 +95,16 @@ def run_benchmark(
 
 @app.local_entrypoint()
 def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
-         first: int = 0, group: str = None, exclude_group: str = None, index: str = None):
-    """Pack solution and run benchmark on Modal GPU, with trajectory tracking."""
+         first: int = 0, group: str = None, exclude_group: str = None, index: str = None,
+         variance_check: int = 0):
+    """Pack solution and run benchmark on Modal GPU, with trajectory tracking.
+
+    --variance-check N: run the same unchanged solution N times to measure
+    across-run noise (~N times bench cost). Result saved to trajectory/noise-floor.json.
+    """
     from functools import partial
 
-    from scripts.bench_utils import find_group_axis, parse_int_filter, run_and_report
+    from scripts.bench_utils import find_group_axis, parse_int_filter, run_and_report, run_variance_check
     from scripts.pack_solution import pack_solution
 
     # Parse group/exclude/index filters
@@ -136,6 +141,16 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
                      group_axis=group_axis, group_values=group_values,
                      exclude_group_values=exclude_group_values,
                      workload_indices=workload_indices)
+
+    if variance_check > 0:
+        run_variance_check(
+            solution, run_fn,
+            n_runs=variance_check,
+            backend=f"modal-{_GPU_TYPE.lower()}",
+            quiet=quiet,
+        )
+        return
+
     run_and_report(
         solution, run_fn,
         force_baseline=force_baseline,

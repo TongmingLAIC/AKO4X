@@ -23,6 +23,7 @@ from scripts.bench_utils import (
     get_trace_set_path,
     parse_int_filter,
     run_and_report,
+    run_variance_check,
 )
 from scripts.pack_solution import pack_solution
 
@@ -65,6 +66,8 @@ def main():
                         help="Exclude workloads matching group axis values (e.g. --exclude-group 1,14107)")
     parser.add_argument("--index", type=str, default=None, metavar="INDICES",
                         help="Only run specific workloads by index (e.g. --index 0,3,5 or --index 2-8)")
+    parser.add_argument("--variance-check", type=int, default=0, metavar="N",
+                        help="Run unchanged solution N times to measure across-run noise (>=2)")
     args = parser.parse_args()
 
     label = args.label_flag or args.label
@@ -105,6 +108,16 @@ def main():
                      group_axis=group_axis, group_values=group_values,
                      exclude_group_values=exclude_group_values,
                      workload_indices=workload_indices)
+
+    if args.variance_check > 0:
+        run_variance_check(
+            solution, run_fn,
+            n_runs=args.variance_check,
+            backend="local",
+            quiet=args.quiet,
+        )
+        return
+
     run_and_report(
         solution, run_fn,
         force_baseline=args.force_baseline,

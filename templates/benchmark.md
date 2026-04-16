@@ -99,6 +99,16 @@ Selects specific workloads by their index in `docs/workloads.jsonl` (same indice
 
 Trajectory is still saved for all filter modes, so you can inspect `results.json` for error details.
 
+## Variance Check (`--variance-check N`)
+
+```bash
+bash scripts/bench.sh --variance-check 3   # run unchanged solution 3 times
+```
+
+Runs the **same unchanged solution N times** back-to-back to measure across-run noise (Modal cold-start, GPU thermal effects, neighbour load). Reports across-run mean/std/CV for the overall score and identifies the most variable workloads.
+
+Useful when you suspect run-to-run noise is large enough to confuse iteration decisions. Runs N times → costs ~N × bench. Result is saved to `trajectory/noise-floor.json` so you can refer back to it when interpreting future score deltas.
+
 ## Error Diagnostics
 
 When a workload fails (RUNTIME_ERROR, COMPILE_ERROR, INCORRECT_NUMERICAL, etc.), the benchmark now prints the error traceback inline (up to 20 lines for the first 3 failed workloads). The full error log is saved in `trajectory/*/results.json` under the `error_log` field for each failed workload.

@@ -579,6 +579,154 @@ def run_and_report(
 
 
 # ---------------------------------------------------------------------------
+# Variance check
+# ---------------------------------------------------------------------------
+
+def run_variance_check(
+    solution: Solution,
+    run_fn: Callable[[Solution, BenchmarkConfig], dict],
+    n_runs: int,
+    *,
+    backend: str = "local",
+    quiet: bool = False,
+):
+    """Run the same unchanged solution N times to measure across-run noise.
+
+    Reports across-run mean/std for the overall score and identifies the most
+    variable workloads. Saves results to trajectory/noise-floor.json so future
+    diff comparisons can use empirical noise as a reference.
+
+    The reference baseline is loaded from cache or profiled once before the loop.
+    Each of the N runs uses the same solution and same baseline; differences
+    between runs are pure noise (Modal cold-start, GPU thermal, neighbour load).
+    """
+    import statistics
+
+    if n_runs < 2:
+        print("ERROR: --variance-check requires N >= 2.", file=sys.stderr)
+        sys.exit(1)
+
+    # Ensure baseline exists (profile once if not cached)
+    baseline = load_baseline()
+    if baseline is None:
+        expert = load_expert_solution()
+        if expert is not None:
+            if not quiet:
+                print(f"\nProfiling expert baseline ({expert.name}) — one-time cost...")
+            baseline_results = run_fn(expert, make_expert_baseline_config())
+        else:
+            if not quiet:
+                print("\nProfiling reference baseline — one-time cost...")
+            ref_solution = pack_reference_as_solution()
+            baseline_results = run_fn(ref_solution, make_baseline_config())
+        if baseline_results:
+            save_baseline(baseline_results)
+            baseline = load_baseline()
+        if baseline is None:
+            print("ERROR: Failed to establish baseline; cannot compute speedups.",
+                  file=sys.stderr)
+            sys.exit(1)
+
+    # Run the solution N times
+    runs = []
+    for i in range(n_runs):
+        if not quiet:
+            print(f"\n=== Variance-check run {i+1}/{n_runs} ===")
+        results = run_fn(solution, make_config(SOLUTION_ITERATIONS))
+        if not results:
+            print(f"  Run {i+1} returned no results; aborting variance check.",
+                  file=sys.stderr)
+            sys.exit(1)
+        results = inject_baseline(results, baseline)
+        score = compute_score(results)
+        runs.append({"score": score, "results": results})
+        if score["final_score"] is not None:
+            print(f"  Run {i+1} score: {score['final_score']:.2f}x")
+        else:
+            print(f"  Run {i+1}: INVALID ({score['failed']} failed, {score['error']} error)")
+
+    # Aggregate
+    valid_scores = [r["score"]["final_score"] for r in runs if r["score"]["final_score"] is not None]
+    if len(valid_scores) < 2:
+        print("\nERROR: Need at least 2 valid runs to compute variance.", file=sys.stderr)
+        sys.exit(1)
+
+    score_mean = statistics.mean(valid_scores)
+    score_std = statistics.stdev(valid_scores)
+    score_cv = score_std / score_mean if score_mean > 0 else 0.0
+
+    # Per-workload aggregation: collect all (uuid -> [speedups])
+    per_workload = {}
+    for run in runs:
+        for def_name, traces in run["results"].items():
+            for uuid, result in traces.items():
+                if result.get("speedup_factor") is not None:
+                    per_workload.setdefault(uuid, []).append(result["speedup_factor"])
+
+    # Compute per-workload mean/std/CV; sort by CV descending
+    workload_stats = []
+    for uuid, speedups in per_workload.items():
+        if len(speedups) < 2:
+            continue
+        m = statistics.mean(speedups)
+        s = statistics.stdev(speedups)
+        cv = s / m if m > 0 else 0.0
+        workload_stats.append({
+            "uuid": uuid,
+            "mean": m,
+            "std": s,
+            "cv": cv,
+            "n": len(speedups),
+        })
+    workload_stats.sort(key=lambda x: x["cv"], reverse=True)
+
+    # Print summary
+    print()
+    print("\u2550" * 60)
+    print(f"  Variance check ({n_runs} runs, baseline cached)")
+    print("\u2550" * 60)
+    for i, r in enumerate(runs, 1):
+        sc = r["score"]["final_score"]
+        if sc is not None:
+            print(f"  Run {i}: {sc:.2f}x")
+        else:
+            print(f"  Run {i}: INVALID")
+    print()
+    print(f"  Across-run mean:  {score_mean:.2f}x")
+    print(f"  Across-run std:   {score_std:.2f}x   (CV: {100*score_cv:.1f}%)")
+    print(f"  Range:            {min(valid_scores):.2f}x \u2014 {max(valid_scores):.2f}x")
+    print()
+    if workload_stats:
+        print(f"  Top 5 most variable workloads (out of {len(workload_stats)}):")
+        for w in workload_stats[:5]:
+            print(f"    {w['uuid'][:8]}...: {w['mean']:.2f}x \u00b1 {w['std']:.2f}x  "
+                  f"(CV {100*w['cv']:.1f}%)")
+    print("\u2550" * 60)
+
+    # Persist
+    noise_floor = {
+        "timestamp": datetime.now().isoformat(),
+        "backend": backend,
+        "n_runs": n_runs,
+        "solution_name": solution.name,
+        "definition": solution.definition,
+        "scores": valid_scores,
+        "score_mean": score_mean,
+        "score_std": score_std,
+        "score_cv": score_cv,
+        "score_min": min(valid_scores),
+        "score_max": max(valid_scores),
+        "per_workload": {w["uuid"]: {k: v for k, v in w.items() if k != "uuid"}
+                         for w in workload_stats},
+    }
+    out_path = PROJECT_ROOT / "trajectory" / "noise-floor.json"
+    out_path.parent.mkdir(exist_ok=True)
+    with open(out_path, "w") as f:
+        json.dump(noise_floor, f, indent=2)
+    print(f"\n  Saved noise floor to: {out_path.relative_to(PROJECT_ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
 
