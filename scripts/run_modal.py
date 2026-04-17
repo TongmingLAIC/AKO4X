@@ -59,6 +59,26 @@ image = (
     .run_commands("apt-get update && apt-get install -y git clang && pip install wheel && pip install git+https://github.com/deepseek-ai/DeepGEMM.git@main --no-build-isolation")
     # --no-deps: direct install pulls a newer apache-tvm-ffi (>=0.2) that is incompatible with TileLang.
     .run_commands("pip install --no-deps nvidia-cutlass-dsl>=4.3.4")
+    # Populate flashinfer's bundled CUTLASS submodule. The pip-tarball install of
+    # flashinfer-python does not include git-submodule contents, so the path
+    # /usr/local/lib/python3.12/site-packages/flashinfer/data/cutlass is empty and
+    # JIT compile of trtllm_paged_attention_decode (used by the expert baseline)
+    # fails with "fatal error: cutlass/cutlass.h: No such file or directory".
+    # SHA pinned to flashinfer 0.6.7's 3rdparty/cutlass submodule reference. Uses
+    # `git fetch --depth 1 <sha>` so we don't pull CUTLASS's full ~750 MB history.
+    # Self-disabling guard: if upstream flashinfer ever ships CUTLASS headers in
+    # the tarball, the `-f cutlass.h` test short-circuits and we don't downgrade.
+    # If flashinfer bumps its submodule SHA and needs a newer CUTLASS API, the
+    # JIT compile will fail loudly — update the SHA then. No silent breakage.
+    .run_commands(
+        "FI_DATA=$(python3 -c 'import flashinfer, os; print(os.path.dirname(flashinfer.__file__))')/data && "
+        "if [ -f $FI_DATA/cutlass/include/cutlass/cutlass.h ]; then "
+        "echo 'CUTLASS headers already present in flashinfer install, skipping patch'; exit 0; fi && "
+        "mkdir -p $FI_DATA/cutlass && cd $FI_DATA/cutlass && "
+        "git init -q && git remote add origin https://github.com/NVIDIA/cutlass.git && "
+        "git fetch --depth 1 -q origin da5e086dab31d63815acafdac9a9c5893b1c69e2 && "
+        "git checkout -q FETCH_HEAD && rm -rf $FI_DATA/cutlass/.git"
+    )
     .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/project/scripts/bench_utils.py")
     .add_local_file(str(PROJECT_ROOT / "config.toml"), "/root/project/config.toml")
 )
