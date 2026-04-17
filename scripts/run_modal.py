@@ -57,6 +57,9 @@ image = (
     .pip_install("flashinfer-python @ https://github.com/flashinfer-ai/flashinfer/archive/refs/heads/main.tar.gz")
     .pip_install("torch-c-dlpack-ext")
     .run_commands("apt-get update && apt-get install -y git clang && pip install wheel && pip install git+https://github.com/deepseek-ai/DeepGEMM.git@main --no-build-isolation")
+    # --no-deps: direct install pulls a newer apache-tvm-ffi (>=0.2) that breaks
+    # TileLang's NestedLoopChecker. See ako4fib-run-dsa-attn-v2 ITERATIONS iter 40/42.
+    .run_commands("pip install --no-deps nvidia-cutlass-dsl>=4.3.4")
     .add_local_file(str(PROJECT_ROOT / "scripts" / "bench_utils.py"), "/root/project/scripts/bench_utils.py")
     .add_local_file(str(PROJECT_ROOT / "config.toml"), "/root/project/config.toml")
 )
