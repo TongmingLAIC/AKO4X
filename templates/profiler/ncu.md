@@ -120,3 +120,14 @@ bash scripts/profile.sh --index 0-18 --group 32-901      # combined filters
 - **One workload at a time**: Pick the most informative workload (usually the slowest from `bench.sh`).
 - **`--page raw` for scripting**: When you need to extract a specific metric value, use raw output and parse the result.
 - **Profiles are auto-saved**: Each run saves output and metadata to `profiles/w<index>_<timestamp>.json`. Compare two profiles by reading both files.
+
+## CUDA Graphs and NCU
+
+If your solution captures kernels into a `torch.cuda.CUDAGraph` (a common optimization to amortize kernel-launch dispatch), NCU's kernel filtering behaves differently. Symptoms and workaround:
+
+- **`--kernel-name` may return "No kernels were profiled"** even when the kernel is clearly running — NCU identifies kernels by their launch site, and graph-captured kernels are launched via `cuGraphLaunch`, which doesn't surface the same symbol info as direct `cuLaunchKernel` calls.
+- **Full-profile (no `--kernel-name`) still works** — NCU will just profile every kernel the graph replays, including the ones you care about. Parse the output by position or by the `void <kernel_name>(` line in the header.
+- **Recommended workflow for graph-captured solutions**:
+  1. Profile the *eager* path first — temporarily skip the graph cache (e.g., return before `graph.replay()` or comment out the capture) so each kernel launches individually via `cuLaunchKernel` and `--kernel-name` filters work normally.
+  2. Once you've identified the bottleneck, re-enable the graph to measure steady-state wall time via `bench.sh`.
+  3. Use `profile.sh --launches` (torch profiler, not NCU) if you only need a launch summary — it traces all activity including graph replay.

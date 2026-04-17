@@ -25,6 +25,7 @@ The first benchmark run profiles the reference implementation and saves results 
 - Do not increase `baseline_iterations` to get a "better" baseline — the reference timing is approximate by design.
 - If `baseline.json` already exists when the environment is created (pre-cached by `spawn.py`), baseline profiling is skipped entirely.
 - If the solution is still the unmodified reference and a baseline is cached, the benchmark is skipped with a message to modify the kernel first.
+- **Cross-session score drift (~0.5–2x)**: The baseline is cached per-env as a fixed latency per workload, but the *absolute* numbers a reference run produces shift 0.5–2% across sessions due to Modal tenant load, driver/image refreshes, and GPU thermal state. As a result, the same unchanged kernel can score 32.25x in one session and 32.67x in another — entirely from baseline drift. When comparing two kernel variants across sessions (especially across different child envs spawned at different times), **re-measure both variants against a single fresh `baseline.json`** (either drop the file and re-profile, or run both variants in the same env back-to-back). The noise floor from `--variance-check` captures within-session noise (typically 0.1–0.5% CV); drift is an across-session effect on top of that.
 
 ## Iteration Tuning
 
@@ -57,6 +58,8 @@ use_isolated_runner = true # run each workload in an isolated process
 ## Workload Filtering
 
 Use filters to run a subset of workloads for fast iteration. All filter modes skip baseline caching — partial results are not saved to `baseline.json`. Filters compose in order: `--index` → `--group` → `--exclude-group` → `--first`.
+
+> ⚠️ **Smoke-test noise warning.** Running on ≤3 workloads typically shows **2-3x variance** vs the full-bench mean due to cold-cache / Triton JIT / Modal jitter. Use small-workload filters for **compile/correctness checks only** — do **not** use them to decide whether a code change is a signal or regression. For that, run the full bench or use `--variance-check N`. The bench prints an explicit warning at the end of runs with ≤3 workloads; heed it.
 
 ### `--first N` — Quick test
 
@@ -105,9 +108,13 @@ Trajectory is still saved for all filter modes, so you can inspect `results.json
 bash scripts/bench.sh --variance-check 3   # run unchanged solution 3 times
 ```
 
-Runs the **same unchanged solution N times** back-to-back to measure across-run noise (Modal cold-start, GPU thermal effects, neighbour load). Reports across-run mean/std/CV for the overall score and identifies the most variable workloads.
+Runs the **same unchanged solution N times** back-to-back to measure across-run noise (Modal cold-start, GPU thermal effects, neighbour load). Reports:
 
-Useful when you suspect run-to-run noise is large enough to confuse iteration decisions. Runs N times → costs ~N × bench. Result is saved to `trajectory/noise-floor.json` so you can refer back to it when interpreting future score deltas.
+- **Overall**: mean / std / CV / range across the N runs.
+- **Top 5 most variable workloads** (by CV), so you can identify outliers.
+- **Per-group noise** (e.g., `batch_size=1: 46.28 ± 0.12x (CV 0.3%)`, …): lets you see whether noise is spread evenly or concentrated in one group — useful when deciding whether a group-specific speedup change is real.
+
+Useful when you suspect run-to-run noise is large enough to confuse iteration decisions. Runs N times → costs ~N × bench. Result is saved to `trajectory/noise-floor.json` (fields: `scores`, `score_mean/std/cv`, `per_workload`, `per_group`, `group_axis`) so you can refer back to it when interpreting future score deltas.
 
 ## Error Diagnostics
 

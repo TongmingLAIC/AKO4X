@@ -574,6 +574,22 @@ def run_and_report(
 
     score = compute_score(results)
     print_results(results, score, quiet=quiet)
+
+    # Warn when a filtered smoke-test ran on very few workloads — single-/few-
+    # workload runs have ~2-3x noise vs full-bench means (cold cache, Triton
+    # JIT on first call per shape, Modal cold-start jitter). This has tripped
+    # agents into reverting changes that were actually neutral or positive.
+    if quick_mode and not quiet and score and score.get("total", 0):
+        total = score["total"]
+        if total <= 3:
+            print()
+            print(f"  \u26a0 Smoke-test warning: only {total} workload"
+                  f"{'s' if total != 1 else ''} benchmarked.")
+            print(f"    Scores on \u22643 workloads can differ 2-3x from full-bench")
+            print(f"    means due to cold-cache / JIT / Modal jitter. Do NOT use")
+            print(f"    these numbers to accept or reject a code change — run the")
+            print(f"    full bench, or use --variance-check N for noise-floor data.")
+
     save_trajectory(results, solution, score, label,
                     baseline_cached=baseline_was_cached, backend=backend)
 
@@ -680,6 +696,27 @@ def run_variance_check(
         })
     workload_stats.sort(key=lambda x: x["cv"], reverse=True)
 
+    # Per-group aggregation: for each group (e.g., batch_size), collect the
+    # per-run group-mean speedups and report mean ± std across runs. This
+    # helps distinguish "entire score shifted" from "one group got noisy".
+    group_axis = find_group_axis()
+    per_group_runs = {}  # group_value -> [run1_mean, run2_mean, ...]
+    for run in runs:
+        gs = run["score"].get("group_scores") or {}
+        for g, d in gs.items():
+            per_group_runs.setdefault(g, []).append(d["speedup"])
+    group_stats = []
+    for g, speeds in sorted(per_group_runs.items(),
+                            key=lambda x: (0, int(x[0])) if str(x[0]).isdigit() else (1, str(x[0]))):
+        if len(speeds) < 2:
+            continue
+        m = statistics.mean(speeds)
+        s = statistics.stdev(speeds)
+        cv = s / m if m > 0 else 0.0
+        group_stats.append({
+            "group": g, "mean": m, "std": s, "cv": cv, "n": len(speeds),
+        })
+
     # Print summary
     print()
     print("\u2550" * 60)
@@ -701,6 +738,13 @@ def run_variance_check(
         for w in workload_stats[:5]:
             print(f"    {w['uuid'][:8]}...: {w['mean']:.2f}x \u00b1 {w['std']:.2f}x  "
                   f"(CV {100*w['cv']:.1f}%)")
+    if group_stats:
+        print()
+        axis_label = group_axis or "group"
+        print(f"  Per-{axis_label} noise (across {n_runs} runs):")
+        for g in group_stats:
+            print(f"    {axis_label}={g['group']}: {g['mean']:.2f}x \u00b1 {g['std']:.2f}x  "
+                  f"(CV {100*g['cv']:.1f}%)")
     print("\u2550" * 60)
 
     # Persist
@@ -718,6 +762,9 @@ def run_variance_check(
         "score_max": max(valid_scores),
         "per_workload": {w["uuid"]: {k: v for k, v in w.items() if k != "uuid"}
                          for w in workload_stats},
+        "per_group": {str(g["group"]): {k: v for k, v in g.items() if k != "group"}
+                      for g in group_stats},
+        "group_axis": group_axis or None,
     }
     out_path = PROJECT_ROOT / "trajectory" / "noise-floor.json"
     out_path.parent.mkdir(exist_ok=True)

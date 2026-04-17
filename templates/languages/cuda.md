@@ -80,6 +80,10 @@ auto cublasGemmEx_fn = (decltype(&cublasGemmEx))dlsym(cublas_handle, "cublasGemm
 
 - **bfloat16 intrinsics**: The TVM FFI builder does not add `-D__CUDA_NO_BFLOAT16_CONVERSIONS__`, so `__nv_bfloat162float` and related intrinsics work out of the box. If you hit bfloat16 conversion errors, make sure you're using `language = "cuda"`, not `language = "python"` with `torch.utils.cpp_extension` (which adds that define by default).
 - **Mixed Triton + CUDA**: Use `language = "python"` with `kernel.py` that imports both Triton and loads CUDA via `cpp_extension`. Place `cpp_extension.load_inline()` at module level (outside `run()`) so the `.so` is compiled once and available across benchmark subprocess invocations.
+- **`load_inline(name=...)` caches by name, NOT by source**: `torch.utils.cpp_extension.load_inline` writes the compiled `.so` to `~/.cache/torch_extensions/<name>/` and on subsequent imports re-uses whatever is there if the **name** matches. If you edit the CUDA source but keep the same `name=`, the cache may still serve the *old* binary. Two ways this bites:
+  - **When preserving multiple variants side-by-side** (e.g. under `reference/<op>/variants/`), give each variant a unique `name=` so they don't alias each other (e.g., `name="radix_topk_graph"` vs `name="radix_topk_no_graph"`).
+  - **When iterating in a single Python process** (unusual inside the isolated-runner bench, but common in ad-hoc debugging), bump the `name=` after each meaningful source change (or `rm -rf ~/.cache/torch_extensions/<name>/`) to guarantee a fresh compile.
+  Benchmarks run in fresh subprocesses (see `use_isolated_runner`), so this doesn't affect `bash scripts/bench.sh`, but it does affect interactive REPL / notebook use.
 - **Which path to use**: Pure CUDA → `language = "cuda"` (TVM FFI, recommended). Need PyTorch ops or mixed Triton + CUDA → `language = "python"`.
 
 ## Config
