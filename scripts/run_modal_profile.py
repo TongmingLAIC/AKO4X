@@ -79,7 +79,7 @@ def run_launches_remote(solution: Solution, workload: Workload) -> str:
 
     from flashinfer_bench import TraceSet
     from flashinfer_bench.bench.evaluators.utils import allocate_outputs
-    from flashinfer_bench.bench.utils import gen_inputs
+    from flashinfer_bench.bench.utils import gen_inputs, load_safetensors
     from flashinfer_bench.compile import BuilderRegistry
 
     trace_set = TraceSet.from_path(TRACE_SET_PATH)
@@ -89,7 +89,18 @@ def run_launches_remote(solution: Solution, workload: Workload) -> str:
     runnable = registry.build(definition, solution)
 
     device = "cuda:0"
-    inputs = gen_inputs(definition, workload, device)
+
+    # Match the pattern in flashinfer_bench/agents/_solution_runner.py: load
+    # safetensors-typed inputs first, then pass the dict into gen_inputs().
+    # Without this, operators with safetensors inputs (e.g., dsa_sparse_attention's
+    # sparse_indices) raise "Missing required safetensors input '<name>'".
+    safe_tensors = (
+        load_safetensors(definition, workload, Path(TRACE_SET_PATH))
+        if any(d.type == "safetensors" for d in workload.inputs.values())
+        else {}
+    )
+
+    inputs = gen_inputs(definition, workload, device, safe_tensors=safe_tensors)
     outputs = allocate_outputs(definition, inputs, device)
 
     # Warmup
@@ -98,7 +109,7 @@ def run_launches_remote(solution: Solution, workload: Workload) -> str:
     torch.cuda.synchronize()
 
     # Regenerate for profiling run
-    inputs = gen_inputs(definition, workload, device)
+    inputs = gen_inputs(definition, workload, device, safe_tensors=safe_tensors)
     outputs = allocate_outputs(definition, inputs, device)
 
     with profile(activities=[ProfilerActivity.CUDA], record_shapes=True) as prof:
