@@ -57,10 +57,14 @@ If you port one thing to CuTe DSL, port from here.
 
 ## Prior work in this repo
 
-- `LESSONS.md` — distilled trajectory from 48 iterations across two
-  sub-envs. Start here before proposing anything radical.
-- `VARIANTS.md` — the three preserved kernels with 5-run variance data.
-- `variants/hybrid_dual_ns.py` (47.43 ± 0.11x) — current production kernel.
+- `LESSONS.md` — distilled trajectory from 84 iterations across three
+  sub-envs (incl. v4 CuTe DSL reduce breakthrough). Start here before
+  proposing anything radical.
+- `VARIANTS.md` — the four preserved kernels with variance data.
+- `variants/cute_reduce.py` (**70.46 ± 0.32x, T=1→100x**) — current
+  production kernel. Hybrid fwd + CuTe DSL reduce. **Start here.**
+- `variants/hybrid_dual_ns.py` (47.43 ± 0.11x) — previous production
+  kernel with Triton reduce. Retained as comparison baseline.
 - `variants/pure_tilelang.py` (45.37 ± 0.03x) — TileLang-only fallback.
 - `variants/pure_triton.py` (45.25 ± 0.04x) — minimal dependency fallback.
 
