@@ -93,6 +93,7 @@ def run_benchmark(
     group_values: list = None,
     exclude_group_values: list = None,
     workload_indices: list = None,
+    smoke: bool = False,
 ) -> dict:
     """Run benchmark on Modal GPU and return results."""
     from flashinfer_bench.bench.benchmark import Benchmark as _Benchmark
@@ -109,6 +110,7 @@ def run_benchmark(
         TRACE_SET_PATH, solution,
         max_workloads=max_workloads, group_axis=group_axis, group_values=group_values,
         exclude_group_values=exclude_group_values, workload_indices=workload_indices,
+        smoke=smoke,
     )
     benchmark = _Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
@@ -118,7 +120,7 @@ def run_benchmark(
 @app.local_entrypoint()
 def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
          first: int = 0, group: str = None, exclude_group: str = None, index: str = None,
-         variance_check: int = 0):
+         variance_check: int = 0, smoke: bool = False):
     """Pack solution and run benchmark on Modal GPU, with trajectory tracking.
 
     --variance-check N: run the same unchanged solution N times to measure
@@ -140,13 +142,14 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
     exclude_group_values = None
     workload_indices = None
 
-    if group or exclude_group:
+    if group or exclude_group or smoke:
         group_axis = find_group_axis()
-        if not group_axis:
+        if not group_axis and (group or exclude_group):
             import sys as _sys
             print("ERROR: --group/--exclude-group requires a variable axis in definition.json, but none found.",
                   file=_sys.stderr)
             _sys.exit(1)
+        # --smoke with no group_axis falls back silently to first workload (build_bench_trace_set handles it).
     if group:
         group_values = parse_int_filter(group)
     if exclude_group:
@@ -167,7 +170,8 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
     run_fn = partial(run_benchmark.remote, max_workloads=first,
                      group_axis=group_axis, group_values=group_values,
                      exclude_group_values=exclude_group_values,
-                     workload_indices=workload_indices)
+                     workload_indices=workload_indices,
+                     smoke=smoke)
 
     if variance_check > 0:
         run_variance_check(
@@ -188,4 +192,5 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
         group_values=group_values,
         exclude_group_values=exclude_group_values,
         workload_indices=workload_indices,
+        smoke=smoke,
     )

@@ -29,7 +29,7 @@ if [ -f "$PROJECT_ROOT/.bench_pending" ]; then
     echo "Fix: edit ITERATIONS.md to add a row for the previous run, then retry." >&2
     echo "Or: 'rm .bench_pending' to force-clear (use sparingly)." >&2
     echo "" >&2
-    echo "Note: smoke tests (--first N, --index, --group WITHOUT --label) are always allowed." >&2
+    echo "Note: smoke tests (--smoke, --first N, --index, --group WITHOUT --label) are always allowed." >&2
     exit 2
 fi
 

@@ -36,6 +36,7 @@ def run_benchmark(
     group_values: list | None = None,
     exclude_group_values: list | None = None,
     workload_indices: list | None = None,
+    smoke: bool = False,
 ) -> dict:
     """Run benchmark locally and return results."""
     trace_set_path = get_trace_set_path()
@@ -43,6 +44,7 @@ def run_benchmark(
         trace_set_path, solution,
         max_workloads=max_workloads, group_axis=group_axis, group_values=group_values,
         exclude_group_values=exclude_group_values, workload_indices=workload_indices,
+        smoke=smoke,
     )
     benchmark = Benchmark(bench_trace_set, config)
     result_trace_set = benchmark.run_all(dump_traces=True)
@@ -71,6 +73,9 @@ def main():
                         help="Only run specific workloads by index (e.g. --index 0,3,5 or --index 2-8)")
     parser.add_argument("--variance-check", type=int, default=0, metavar="N",
                         help="Run unchanged solution N times to measure across-run noise (>=2)")
+    parser.add_argument("--smoke", action="store_true",
+                        help="Run one workload per distinct group-axis bucket (covers every "
+                             "group with minimum workload count). Does not cache baseline.")
     args = parser.parse_args()
 
     label = args.label_flag or args.label
@@ -81,12 +86,13 @@ def main():
     exclude_group_values = None
     workload_indices = None
 
-    if args.group or args.exclude_group:
+    if args.group or args.exclude_group or args.smoke:
         group_axis = find_group_axis()
-        if not group_axis:
+        if not group_axis and (args.group or args.exclude_group):
             print("ERROR: --group/--exclude-group requires a variable axis in definition.json, but none found.",
                   file=sys.stderr)
             sys.exit(1)
+        # --smoke with no group_axis falls back silently to first workload.
     if args.group:
         group_values = parse_int_filter(args.group)
     if args.exclude_group:
@@ -110,7 +116,8 @@ def main():
     run_fn = partial(run_benchmark, max_workloads=args.first,
                      group_axis=group_axis, group_values=group_values,
                      exclude_group_values=exclude_group_values,
-                     workload_indices=workload_indices)
+                     workload_indices=workload_indices,
+                     smoke=args.smoke)
 
     if args.variance_check > 0:
         run_variance_check(
@@ -131,6 +138,7 @@ def main():
         group_values=group_values,
         exclude_group_values=exclude_group_values,
         workload_indices=workload_indices,
+        smoke=args.smoke,
     )
 
 

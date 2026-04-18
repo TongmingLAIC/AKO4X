@@ -29,6 +29,7 @@ bash scripts/bench.sh                          # full benchmark
 bash scripts/bench.sh --label "iter-N desc"    # with trajectory snapshot
 bash scripts/bench.sh -q                       # score + per-group summary only
 bash scripts/bench.sh --first 1                # quick compile/correctness check
+bash scripts/bench.sh --smoke                  # one workload per group-axis bucket
 bash scripts/bench.sh --group 8,16             # filter by group axis values
 bash scripts/bench.sh --group 32-901           # filter by group axis range
 bash scripts/bench.sh --exclude-group 1,14107  # exclude specific group values
@@ -58,8 +59,8 @@ bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
    6. Git commit: `bench(<score>): <one-line description>`
 
    **Not gated** (always allowed, no iteration logging required):
-   - Smoke tests: `--first N`, `--index`, `--group`, `--exclude-group` without `--label`
-   - `bash scripts/profile.sh ...` (any form)
+   - Smoke tests: `--smoke`, `--first N`, `--index`, `--group`, `--exclude-group` without `--label`
+   - `bash scripts/profile.sh ...`, `bash scripts/sanitize.sh ...` (any form)
    - Failed runs (COMPILE_ERROR, INVALID) — fix and retry freely
    - Escape hatch: `rm .bench_pending` to force-clear (use sparingly)
 4. **Available investigation tools** (same workload-filter syntax across all three):

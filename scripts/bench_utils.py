@@ -123,6 +123,7 @@ def build_bench_trace_set(
     group_values: list | None = None,
     exclude_group_values: list | None = None,
     workload_indices: list | None = None,
+    smoke: bool = False,
 ) -> TraceSet:
     """Load trace set and build a single-operator benchmark TraceSet.
 
@@ -132,6 +133,8 @@ def build_bench_trace_set(
         group_values: If set, only include workloads whose group_axis value is in this list.
         exclude_group_values: If set, exclude workloads whose group_axis value is in this list.
         workload_indices: If set, only include workloads at these indices (in the original list).
+        smoke: If True, reduce to one workload per distinct group_axis value (first
+               occurrence per bucket). Falls back to the first workload if no group_axis.
     """
     trace_set = TraceSet.from_path(trace_set_path)
 
@@ -168,6 +171,19 @@ def build_bench_trace_set(
                 f"All workloads excluded by {group_axis} not in "
                 f"{{{', '.join(str(v) for v in exclude_group_values)}}}."
             )
+
+    if smoke:
+        if group_axis:
+            seen = set()
+            picked = []
+            for w in workloads:
+                v = w.workload.axes.get(group_axis)
+                if v not in seen:
+                    seen.add(v)
+                    picked.append(w)
+            workloads = picked
+        else:
+            workloads = workloads[:1]
 
     if max_workloads > 0:
         workloads = workloads[:max_workloads]
@@ -465,6 +481,7 @@ def run_and_report(
     group_values: list | None = None,
     exclude_group_values: list | None = None,
     workload_indices: list | None = None,
+    smoke: bool = False,
 ):
     """Two-phase benchmark orchestration shared by local and modal runners.
 
@@ -481,8 +498,12 @@ def run_and_report(
                       Partial results are NOT saved to baseline cache.
         exclude_group_values: If set, exclude workloads matching these group axis values.
         workload_indices: If set, only benchmark workloads at these indices.
+        smoke: If True, reduce to one workload per distinct group_axis value
+               (covers every group with minimum workload count). Partial
+               results are NOT saved to baseline cache.
     """
-    quick_mode = max_workloads > 0 or bool(group_values) or bool(exclude_group_values) or bool(workload_indices)
+    quick_mode = (max_workloads > 0 or bool(group_values) or bool(exclude_group_values)
+                  or bool(workload_indices) or smoke)
     if quick_mode and not quiet:
         parts = []
         if workload_indices:
@@ -495,6 +516,9 @@ def run_and_report(
         if exclude_group_values:
             axis = find_group_axis()
             parts.append(f"excluding {axis}={','.join(str(v) for v in exclude_group_values)}")
+        if smoke:
+            axis = find_group_axis() or "workload"
+            parts.append(f"smoke (one per {axis} bucket)")
         print(f"\n*** Quick test mode: {' + '.join(parts)} ***")
 
     baseline = None if force_baseline else load_baseline()

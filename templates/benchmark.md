@@ -57,7 +57,7 @@ use_isolated_runner = true # run each workload in an isolated process
 
 ## Workload Filtering
 
-Use filters to run a subset of workloads for fast iteration. All filter modes skip baseline caching — partial results are not saved to `baseline.json`. Filters compose in order: `--index` → `--group` → `--exclude-group` → `--first`.
+Use filters to run a subset of workloads for fast iteration. All filter modes skip baseline caching — partial results are not saved to `baseline.json`. Filters compose in order: `--index` → `--group` → `--exclude-group` → `--smoke` → `--first`.
 
 > ⚠️ **Smoke-test noise warning.** Running on ≤3 workloads typically shows **2-3x variance** vs the full-bench mean due to cold-cache / Triton JIT / Modal jitter. Use small-workload filters for **compile/correctness checks only** — do **not** use them to decide whether a code change is a signal or regression. For that, run the full bench or use `--variance-check N`. The bench prints an explicit warning at the end of runs with ≤3 workloads; heed it.
 
@@ -69,6 +69,15 @@ bash scripts/bench.sh --first 3                     # first 3 workloads
 ```
 
 Useful for quickly validating that your kernel compiles and produces correct output.
+
+### `--smoke` — One workload per group bucket
+
+```bash
+bash scripts/bench.sh --smoke                       # e.g. 5 workloads for group_axis={1,2,6,7,8}
+bash scripts/bench.sh --smoke --exclude-group 1     # skip one bucket
+```
+
+Picks the first workload for each distinct value of the operator's `group_axis` (see `docs/definition.json` → `variable_axis`). For an operator with group axis `num_tokens` and values `{1, 2, 6, 7, 8}`, `--smoke` runs 5 workloads total — one per bucket — giving correctness coverage across all shapes at roughly `5/23` of full-bench cost. If the operator has no variable axis, `--smoke` falls back to the first workload only (same as `--first 1`). Composes with other filters; applied after `--group`/`--exclude-group`.
 
 ### `--group VALUES` — Filter by group axis
 
