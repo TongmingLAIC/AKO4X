@@ -308,8 +308,11 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
                 if f.is_file():
                     shutil.copy2(f, child_dir / "solution" / f.name)
         else:
-            # Copy the kernel file
-            shutil.copy2(kp, child_dir / "solution" / kp.name)
+            # Rename the entry-point source to match config.toml's entry_point
+            # filename (e.g. kernel.py::run), otherwise pack_solution fails with
+            # "Entry source file 'kernel.py' not found in sources".
+            dest_name = infer_language(kernel_path)[1].split("::", 1)[0] if kp.suffix.lower() == ".py" else kp.name
+            shutil.copy2(kp, child_dir / "solution" / dest_name)
             # Copy sibling files (binding.py, other source files)
             for sibling in kp.parent.iterdir():
                 if sibling.is_file() and sibling != kp:
