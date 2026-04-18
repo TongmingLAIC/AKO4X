@@ -667,6 +667,25 @@ def run_variance_check(
                   file=sys.stderr)
             sys.exit(1)
 
+    # Warmup run — always performed, discarded from aggregate stats.
+    # Why: Modal containers / Triton JIT cache / GPU thermal state all show a
+    # 0.3–0.6x downward bias on the very first run even when the baseline is
+    # already cached (observed consistently across v3/v4/v5 sessions). Running
+    # the workload once before the N measured runs stabilizes these before
+    # they contaminate the mean.
+    if not quiet:
+        print(f"\n=== Warmup run (discarded from aggregate) ===")
+    warmup_results = run_fn(solution, make_config(SOLUTION_ITERATIONS))
+    if not warmup_results:
+        print("  Warmup returned no results; aborting variance check.", file=sys.stderr)
+        sys.exit(1)
+    warmup_results = inject_baseline(warmup_results, baseline)
+    warmup_score = compute_score(warmup_results)
+    if warmup_score["final_score"] is not None:
+        print(f"  Warmup score: {warmup_score['final_score']:.2f}x (discarded)")
+    else:
+        print(f"  Warmup: INVALID ({warmup_score['failed']} failed, {warmup_score['error']} error)")
+
     # Run the solution N times
     runs = []
     for i in range(n_runs):

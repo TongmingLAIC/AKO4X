@@ -114,16 +114,18 @@ Trajectory is still saved for all filter modes, so you can inspect `results.json
 ## Variance Check (`--variance-check N`)
 
 ```bash
-bash scripts/bench.sh --variance-check 3   # run unchanged solution 3 times
+bash scripts/bench.sh --variance-check 3   # 1 warmup + 3 measured runs
 ```
 
-Runs the **same unchanged solution N times** back-to-back to measure across-run noise (Modal cold-start, GPU thermal effects, neighbour load). Reports:
+Runs **1 warmup + N measured runs** of the same unchanged solution back-to-back. The warmup run is always performed and always discarded from the aggregate — across v3/v4/v5 sessions the first run consistently shows a 0.3–0.6x downward bias (Modal container cold-start, Triton JIT cache cold, GPU thermal ramp). Its score is printed for visibility (`Warmup score: X.XXx (discarded)`) but not included in mean/std.
 
-- **Overall**: mean / std / CV / range across the N runs.
+Reports on the N measured runs:
+
+- **Overall**: mean / std / CV / range.
 - **Top 5 most variable workloads** (by CV), so you can identify outliers.
 - **Per-group noise** (e.g., `batch_size=1: 46.28 ± 0.12x (CV 0.3%)`, …): lets you see whether noise is spread evenly or concentrated in one group — useful when deciding whether a group-specific speedup change is real.
 
-Useful when you suspect run-to-run noise is large enough to confuse iteration decisions. Runs N times → costs ~N × bench. Result is saved to `trajectory/noise-floor.json` (fields: `scores`, `score_mean/std/cv`, `per_workload`, `per_group`, `group_axis`) so you can refer back to it when interpreting future score deltas.
+Cost: `(N + 1) × bench`. Result is saved to `trajectory/noise-floor.json` (fields: `scores`, `score_mean/std/cv`, `per_workload`, `per_group`, `group_axis`).
 
 ## Error Diagnostics
 
