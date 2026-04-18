@@ -122,6 +122,16 @@ Typical triage sequence when `bench.sh` reports `INCORRECT_NUMERICAL` or `RUNTIM
 
 ## Gotchas
 
+- **Benign library-init noise inflates the error count.** The first thing you'll see in almost any sanitizer run is a block of:
+  ```
+  ========= Program hit CUDA_ERROR_INVALID_VALUE (error 1) due to
+  =========     "invalid argument" on CUDA API call to cuGetProcAddress_v2.
+  ```
+  This is **not a kernel bug** and **not caused by your solution**. PyTorch / triton / cupti probe the CUDA driver for optional entry points at import time via `cuGetProcAddress_v2`; when a symbol isn't available the driver returns `INVALID_VALUE` (which the library silently handles), but compute-sanitizer logs every probe. Typical count: **10–30 hits per memcheck run** on any fresh Python process. **How to tell it apart from real bugs:**
+  - Real kernel errors mention `kernel <name>`, `thread (x,y,z)`, `block (bx,by,bz)`, or a specific Address.
+  - `cuGetProcAddress_v2` noise never mentions a kernel or thread — only Python host frames.
+
+  Treat the top-of-output `ERROR SUMMARY: N errors` as a *ceiling*, not a signal. Scan the body for blocks that mention a kernel or thread — those are the real hits.
 - **Sanitizer replays the kernel**, so any race or nondeterminism may reproduce differently than a plain run. Treat a single clean sanitizer report as a positive signal, not a guarantee.
 - **initcheck false positives on atomic accumulators.** Kernels that atomic-add into a pre-zeroed buffer can look "read before write" to initcheck if the pre-zero is in a different kernel. Verify by adding an explicit `torch.zeros_like` right before the call — if it silences initcheck, the warning was a false positive.
 - **racecheck false positives on benign races.** Idempotent writes (writing the same value from multiple threads) still flag as races. If you intentionally have all threads write the same LSE / scalar, those hits are expected.
