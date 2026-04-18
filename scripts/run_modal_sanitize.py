@@ -1,24 +1,14 @@
 """
 FlashInfer-Bench Compute-Sanitizer Runner (Modal Backend).
 
-Runs NVIDIA compute-sanitizer on a solution for specific workloads to catch
-GPU memory / race / initialization / sync bugs that end-to-end bench can't
-diagnose. Useful when a solution hits INCORRECT_NUMERICAL or RUNTIME_ERROR
-and the cause isn't obvious from the kernel source.
-
-Four check tools (pick one via --tool, or run "all" for a full sweep):
-
-    memcheck   out-of-bounds / misaligned GMEM accesses, leaks
-    racecheck  shared-memory race conditions (conflicting warp writes)
-    initcheck  reads of uninitialized GMEM / register memory
-    synccheck  incorrect __syncthreads usage
-    all        run all four sequentially
+Thin wrapper around flashinfer_bench_run_sanitizer. `--tool` forwards to
+the `sanitizer_types` argument; `all` passes None (flashinfer-bench
+default = all four tools). Output is post-processed by _summarize_noise
+to surface a "NOISE FILTER" banner before the raw sanitizer text.
 
 Usage:
     modal run scripts/run_modal_sanitize.py --list
-    modal run scripts/run_modal_sanitize.py --index 0
-    modal run scripts/run_modal_sanitize.py --index 0 --tool initcheck
-    modal run scripts/run_modal_sanitize.py --index 0,3,5 --tool memcheck
+    modal run scripts/run_modal_sanitize.py --index 0 --tool memcheck
 """
 
 import json

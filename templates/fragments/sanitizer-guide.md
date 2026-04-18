@@ -1,16 +1,11 @@
 ## Sanitizer
 
-`compute-sanitizer` catches four classes of GPU correctness bugs. Use when `INCORRECT_NUMERICAL` or `RUNTIME_ERROR` cause is unclear.
+`bash scripts/sanitize.sh` wraps NVIDIA `compute-sanitizer`. Use for `INCORRECT_NUMERICAL` / `RUNTIME_ERROR` cases where the cause isn't visible from kernel source.
 
 ```bash
-bash scripts/sanitize.sh --list                         # list workloads with indices
-bash scripts/sanitize.sh --index 5                      # memcheck (default: OOB, misaligned)
-bash scripts/sanitize.sh --index 5 --tool initcheck     # uninitialized memory reads
-bash scripts/sanitize.sh --index 5 --tool racecheck     # SMEM race conditions
-bash scripts/sanitize.sh --index 5 --tool synccheck     # bad __syncthreads under divergence
-bash scripts/sanitize.sh --index 5 --tool all           # run all four (slower)
+bash scripts/sanitize.sh --list
+bash scripts/sanitize.sh --index 5                    # memcheck (default)
+bash scripts/sanitize.sh --index 5 --tool initcheck   # racecheck / synccheck / all also valid
 ```
 
-Pick by failure class: garbage values → `initcheck`; near-miss values → `racecheck`; illegal-address → `memcheck`; hangs → `synccheck`; no hypothesis → `all`.
-Supports same filters as bench.sh: `--group`, `--exclude-group`, `--index` with range syntax.
-Read `docs/sanitizer/sanitizer.md` for when to pick which tool, reading output, and common gotchas.
+Same `--index` / `--group` / `--exclude-group` / range syntax as `bench.sh`. Output saves to `sanitizer/w<idx>_<tool>_<ts>.json`. See `docs/sanitizer/sanitizer.md` for wrapper-specific behavior (NOISE FILTER banner, `--tool all` sequential-timeout semantics, CUDA-graph interaction).

@@ -1,17 +1,11 @@
 """
 FlashInfer-Bench Compute-Sanitizer Runner (Local Backend).
 
-Runs NVIDIA compute-sanitizer on a solution for specific workloads. Local
-requires a host `compute-sanitizer` binary on PATH (ships with the CUDA
-toolkit).
-
-Four check tools (pick one via --tool, or "all" for a full sweep):
-
-    memcheck   out-of-bounds / misaligned GMEM accesses, leaks
-    racecheck  shared-memory race conditions
-    initcheck  reads of uninitialized GMEM / register memory
-    synccheck  incorrect __syncthreads usage
-    all        run all four sequentially
+Thin wrapper around flashinfer_bench_run_sanitizer. Requires a host
+`compute-sanitizer` binary on PATH (ships with CUDA toolkit). `--tool`
+forwards to the `sanitizer_types` argument; `all` passes None (runs all
+four). Output is post-processed by _summarize_noise to surface a
+"NOISE FILTER" banner before the raw sanitizer text.
 """
 
 import argparse

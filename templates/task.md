@@ -62,8 +62,8 @@ bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
    - `bash scripts/profile.sh ...` (any form)
    - Failed runs (COMPILE_ERROR, INVALID) — fix and retry freely
    - Escape hatch: `rm .bench_pending` to force-clear (use sparingly)
-4. **When stuck or uncertain** — investigate before the next code change:
-   - Profile: `bash scripts/profile.sh --index <N>` for deep NCU metrics (kernel names, occupancy, memory throughput, registers)
-   - Sanitize: `bash scripts/sanitize.sh --index <N>` (memcheck / initcheck / racecheck / synccheck) when `INCORRECT_NUMERICAL` or `RUNTIME_ERROR` cause is unclear — see `docs/sanitizer/sanitizer.md`
-   - Search: WebSearch for API behavior, hardware specs, or optimization patterns
+4. **Available investigation tools** (same workload-filter syntax across all three):
+   - `bash scripts/profile.sh --index <N>` — ncu metrics (see `docs/profiler/ncu.md`)
+   - `bash scripts/sanitize.sh --index <N>` — compute-sanitizer for `INCORRECT_NUMERICAL` / `RUNTIME_ERROR` (see `docs/sanitizer/sanitizer.md`)
+   - `bash scripts/diff.sh [iter-A iter-B]` — per-workload latency diff between trajectory snapshots
 5. Stop when no further improvements found; summarize results
