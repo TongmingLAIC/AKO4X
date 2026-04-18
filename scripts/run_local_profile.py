@@ -144,6 +144,9 @@ def run_ncu(args, traces):
 
 
 def main():
+    # Line-buffer stdout so progress prints stream to caller when piped.
+    sys.stdout.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(
         description="NCU profiler",
         formatter_class=argparse.RawDescriptionHelpFormatter,

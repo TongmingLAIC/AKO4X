@@ -177,6 +177,9 @@ def run_sanitizer(args, traces):
 
 
 def main():
+    # Line-buffer stdout so progress prints stream to caller when piped.
+    sys.stdout.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(
         description="compute-sanitizer runner (memcheck / racecheck / initcheck / synccheck)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

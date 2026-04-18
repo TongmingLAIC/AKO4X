@@ -180,6 +180,9 @@ def main(
     exclude_group: str = None,
 ):
     """Profiler — NCU for specific workloads via Modal."""
+    # Line-buffer stdout so progress prints stream to caller when piped.
+    sys.stdout.reconfigure(line_buffering=True)
+
     import os
 
     from scripts.bench_utils import parse_int_filter

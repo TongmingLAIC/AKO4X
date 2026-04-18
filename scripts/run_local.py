@@ -51,6 +51,9 @@ def run_benchmark(
 
 def main():
     """Pack solution and run benchmark."""
+    # Line-buffer stdout so per-run progress prints stream to caller when piped.
+    sys.stdout.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(description="Run benchmark with optional trajectory tracking")
     parser.add_argument("label", nargs="?", default=None, help="Optional label for trajectory tracking")
     parser.add_argument("--label", dest="label_flag", default=None, help=argparse.SUPPRESS)
