@@ -1,42 +1,13 @@
 # Profiler Reference
 
-Two profiling modes: **`--launches`** for quick kernel launch overview, **NCU** for deep per-kernel analysis.
-
-## When to Use Each Mode
-
-| Mode | Use When | Speed |
-|------|----------|-------|
-| `--launches` | Launch overhead diagnosis, kernel count, timing distribution | Fast (single pass) |
-| NCU (default) | Memory vs compute bottleneck, occupancy, warp stalls | Slow (kernel replay) |
-
-**Start with `--launches`** to see the big picture (how many kernels, which ones dominate). Switch to NCU only when you need hardware-counter-level detail on a specific kernel.
+NCU (NVIDIA Nsight Compute) deep per-kernel analysis. Replays each kernel to collect hardware performance counters: kernel names, occupancy, memory throughput, registers, warp stalls, SMEM usage.
 
 **Skip profiling when:**
 
 - The kernel isn't correct yet — fix FAILED workloads first.
 - You haven't read the bench output yet — per-workload and per-group breakdowns often tell you what to try next without profiling.
 
-## Kernel Launch Summary (`--launches`)
-
-Uses `torch.profiler` to trace CUDA activity in a single pass. Shows kernel names, call counts, and CUDA timing — much faster than NCU.
-
-```bash
-# Launch summary for a single workload
-bash scripts/profile.sh --index 5 --launches
-
-# Batch: compare launch patterns across workloads
-bash scripts/profile.sh --index 0,3,5 --launches
-bash scripts/profile.sh --index 0-4 --launches
-
-# Filter workloads by group axis
-bash scripts/profile.sh --index 0-18 --launches --exclude-group 1,14107
-```
-
-**Reading the output:**
-- **Total CUDA kernel launches** — high count (50+) suggests launch overhead; consider fusing kernels.
-- **Per-kernel CUDA time** — sorted by total time. If one kernel dominates (>80%), focus optimization there. If many small kernels share time, launch overhead is the bottleneck.
-
-## NCU Deep Profile (default)
+## NCU Deep Profile
 
 NVIDIA Nsight Compute replays each kernel to collect hardware performance counters.
 
@@ -88,7 +59,6 @@ bash scripts/profile.sh --index 0-18 --group 32-901      # combined filters
 |--------|---------|-------------|
 | `--index` | (required) | Workload indices (e.g. `5`, `0,3,5`, `2-8`) |
 | `--list` | — | Print workload table with indices |
-| `--launches` | — | Quick kernel launch summary (torch.profiler) |
 | `--group` | (all) | Filter by group axis values (e.g. `8,16` or `32-901`) |
 | `--exclude-group` | (none) | Exclude by group axis values |
 | `--ncu-options` | — | List available NCU section sets and sections |
@@ -130,4 +100,3 @@ If your solution captures kernels into a `torch.cuda.CUDAGraph` (a common optimi
 - **Recommended workflow for graph-captured solutions**:
   1. Profile the *eager* path first — temporarily skip the graph cache (e.g., return before `graph.replay()` or comment out the capture) so each kernel launches individually via `cuLaunchKernel` and `--kernel-name` filters work normally.
   2. Once you've identified the bottleneck, re-enable the graph to measure steady-state wall time via `bench.sh`.
-  3. Use `profile.sh --launches` (torch profiler, not NCU) if you only need a launch summary — it traces all activity including graph replay.

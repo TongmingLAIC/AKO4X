@@ -2,13 +2,12 @@
 FlashInfer-Bench Profiler Runner (Modal Backend).
 
 Profiles a solution on specific workloads using NVIDIA Nsight Compute (NCU)
-or lightweight torch.profiler for kernel launch analysis on Modal cloud GPU.
+on Modal cloud GPU.
 
 Usage:
     modal run scripts/run_modal_profile.py --list
     modal run scripts/run_modal_profile.py --index 0
     modal run scripts/run_modal_profile.py --index 0 --set full --page raw
-    modal run scripts/run_modal_profile.py --index 0,3,5 --launches
 """
 
 import json
@@ -69,67 +68,6 @@ def run_ncu_remote(solution: Solution, workload: Workload, ncu_kwargs: dict) -> 
         trace_set_path=TRACE_SET_PATH,
         **ncu_kwargs,
     )
-
-
-@app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
-def run_launches_remote(solution: Solution, workload: Workload) -> str:
-    """Run torch.profiler inside Modal container and return kernel launch summary."""
-    import torch
-    from torch.profiler import ProfilerActivity, profile
-
-    from flashinfer_bench import TraceSet
-    from flashinfer_bench.bench.evaluators.utils import allocate_outputs
-    from flashinfer_bench.bench.utils import gen_inputs, load_safetensors
-    from flashinfer_bench.compile import BuilderRegistry
-
-    trace_set = TraceSet.from_path(TRACE_SET_PATH)
-    definition = trace_set.definitions[solution.definition]
-
-    registry = BuilderRegistry.get_instance()
-    runnable = registry.build(definition, solution)
-
-    device = "cuda:0"
-
-    # Match the pattern in flashinfer_bench/agents/_solution_runner.py: load
-    # safetensors-typed inputs first, then pass the dict into gen_inputs().
-    # Without this, operators with safetensors inputs (e.g., dsa_sparse_attention's
-    # sparse_indices) raise "Missing required safetensors input '<name>'".
-    safe_tensors = (
-        load_safetensors(definition, workload, Path(TRACE_SET_PATH))
-        if any(d.type == "safetensors" for d in workload.inputs.values())
-        else {}
-    )
-
-    inputs = gen_inputs(definition, workload, device, safe_tensors=safe_tensors)
-    outputs = allocate_outputs(definition, inputs, device)
-
-    # Warmup
-    with torch.no_grad():
-        runnable.call_destination_passing(*inputs, *outputs)
-    torch.cuda.synchronize()
-
-    # Regenerate for profiling run
-    inputs = gen_inputs(definition, workload, device, safe_tensors=safe_tensors)
-    outputs = allocate_outputs(definition, inputs, device)
-
-    with profile(activities=[ProfilerActivity.CUDA], record_shapes=True) as prof:
-        with torch.no_grad():
-            runnable.call_destination_passing(*inputs, *outputs)
-        torch.cuda.synchronize()
-
-    events = prof.key_averages()
-    cuda_events = [e for e in events if e.self_cuda_time_total > 0]
-    total_launches = sum(e.count for e in cuda_events)
-    total_cuda_us = sum(e.self_cuda_time_total for e in cuda_events)
-
-    lines = []
-    lines.append(f"Total CUDA kernel launches: {total_launches}")
-    lines.append(f"Total CUDA time: {total_cuda_us / 1000:.3f} ms")
-    lines.append("")
-    lines.append(events.table(sort_by="cuda_time_total", row_limit=50))
-
-    runnable.cleanup()
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +157,6 @@ def _list_ncu_options():
 def main(
     index: str = None,
     list: bool = False,
-    launches: bool = False,
     ncu_options: bool = False,
     set: str = "detailed",
     page: str = "details",
@@ -230,7 +167,7 @@ def main(
     group: str = None,
     exclude_group: str = None,
 ):
-    """Profiler — NCU or kernel launch summary for specific workloads via Modal."""
+    """Profiler — NCU for specific workloads via Modal."""
     import os
 
     from scripts.bench_utils import parse_int_filter
@@ -251,7 +188,6 @@ def main(
 
     if index is None:
         print("Usage: modal run scripts/run_modal_profile.py --index <N>")
-        print("       modal run scripts/run_modal_profile.py --index <N> --launches")
         print("       modal run scripts/run_modal_profile.py --list")
         print("       modal run scripts/run_modal_profile.py --ncu-options")
         sys.exit(1)
@@ -276,48 +212,40 @@ def main(
         workload = Workload.model_validate(wl_entry["workload"])
         axes_str = ", ".join(f"{k}={v}" for k, v in sorted(workload.axes.items()))
 
-        if launches:
-            print(f"\n{'=' * 60}")
-            print(f"Workload {idx}: {workload.uuid[:8]}  ({axes_str})")
-            print(f"{'=' * 60}")
+        print(f"\nProfiling workload {idx}: {workload.uuid[:8]}...")
+        print(f"  Axes: {axes_str}")
+        print(f"  Set: {set}, Page: {page}")
+        print(f"  GPU: {_GPU_TYPE}")
+        if kernel_name:
+            print(f"  Kernel filter: {kernel_name}")
+        print()
 
-            result = run_launches_remote.remote(solution, workload)
-            print(result)
-        else:
-            print(f"\nProfiling workload {idx}: {workload.uuid[:8]}...")
-            print(f"  Axes: {axes_str}")
-            print(f"  Set: {set}, Page: {page}")
-            print(f"  GPU: {_GPU_TYPE}")
-            if kernel_name:
-                print(f"  Kernel filter: {kernel_name}")
-            print()
+        ncu_kwargs = {"set": set, "page": page, "timeout": timeout}
+        if kernel_name:
+            ncu_kwargs["kernel_name"] = kernel_name
+        if sections:
+            ncu_kwargs["sections"] = [s.strip() for s in sections.split(",")]
+        if max_lines > 0:
+            ncu_kwargs["max_lines"] = max_lines
 
-            ncu_kwargs = {"set": set, "page": page, "timeout": timeout}
-            if kernel_name:
-                ncu_kwargs["kernel_name"] = kernel_name
-            if sections:
-                ncu_kwargs["sections"] = [s.strip() for s in sections.split(",")]
-            if max_lines > 0:
-                ncu_kwargs["max_lines"] = max_lines
+        result = run_ncu_remote.remote(solution, workload, ncu_kwargs)
+        print(result)
 
-            result = run_ncu_remote.remote(solution, workload, ncu_kwargs)
-            print(result)
-
-            # Auto-save NCU profile output
-            profiles_dir = PROJECT_ROOT / "profiles"
-            profiles_dir.mkdir(exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            profile_data = {
-                "timestamp": datetime.now().isoformat(),
-                "workload_index": idx,
-                "workload_uuid": workload.uuid,
-                "axes": dict(workload.axes),
-                "ncu_set": set,
-                "ncu_page": page,
-                "kernel_filter": kernel_name or None,
-                "backend": f"modal-{_GPU_TYPE.lower()}",
-                "output": result,
-            }
-            profile_path = profiles_dir / f"w{idx}_{timestamp}.json"
-            profile_path.write_text(json.dumps(profile_data, indent=2))
-            print(f"\nProfile saved to: {profile_path}", file=sys.stderr)
+        # Auto-save NCU profile output
+        profiles_dir = PROJECT_ROOT / "profiles"
+        profiles_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        profile_data = {
+            "timestamp": datetime.now().isoformat(),
+            "workload_index": idx,
+            "workload_uuid": workload.uuid,
+            "axes": dict(workload.axes),
+            "ncu_set": set,
+            "ncu_page": page,
+            "kernel_filter": kernel_name or None,
+            "backend": f"modal-{_GPU_TYPE.lower()}",
+            "output": result,
+        }
+        profile_path = profiles_dir / f"w{idx}_{timestamp}.json"
+        profile_path.write_text(json.dumps(profile_data, indent=2))
+        print(f"\nProfile saved to: {profile_path}", file=sys.stderr)

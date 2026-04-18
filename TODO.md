@@ -9,8 +9,8 @@ of intent.
 ## Agent onboarding
 
 - **Spawned children don't inherit later parent fixes.** A child env spawned
-  before a harness fix (e.g. the `profile.sh --launches` fix) keeps the
-  broken `scripts/` until re-spawned. **Intent:** a sync path
+  before a harness fix (e.g. a `run_modal_profile.py` fix) keeps the old
+  `scripts/` until re-spawned. **Intent:** a sync path
   (e.g. `spawn.py --sync-scripts <child>`) or an explicit workflow note.
 - **ITERATIONS.md is slow to scan for proven-dead paths.** After 50+ iters
   the file is 200+ lines of mixed summary / details / rejections / sweeps;

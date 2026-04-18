@@ -35,8 +35,6 @@ bash scripts/bench.sh --exclude-group 1,14107  # exclude specific group values
 bash scripts/bench.sh --index 0,3,5            # run specific workloads by index
 bash scripts/profile.sh --list                 # list workloads with indices
 bash scripts/profile.sh --index 5              # NCU profile a specific workload
-bash scripts/profile.sh --index 5 --launches   # quick kernel launch summary
-bash scripts/profile.sh --index 0,3,5 --launches  # batch launch summary
 bash scripts/diff.sh                              # compare last two benchmark runs
 bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
 ```
@@ -63,6 +61,6 @@ bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
    - Failed runs (COMPILE_ERROR, INVALID) — fix and retry freely
    - Escape hatch: `rm .bench_pending` to force-clear (use sparingly)
 4. **When stuck or uncertain** — investigate before the next code change:
-   - Profile: `bash scripts/profile.sh --index <N> --launches` for launch overview, `--index <N>` for deep NCU
+   - Profile: `bash scripts/profile.sh --index <N>` for deep NCU metrics (kernel names, occupancy, memory throughput, registers)
    - Search: WebSearch for API behavior, hardware specs, or optimization patterns
 5. Stop when no further improvements found; summarize results

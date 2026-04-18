@@ -1,8 +1,7 @@
 """
 FlashInfer-Bench NCU Profiler Runner.
 
-Profiles a solution on specific workloads using NVIDIA Nsight Compute (NCU)
-or lightweight torch.profiler for kernel launch analysis.
+Profiles a solution on specific workloads using NVIDIA Nsight Compute (NCU).
 Reuses pack_solution() to build Solution objects and the flashinfer-bench NCU agent API.
 """
 
@@ -144,82 +143,14 @@ def run_ncu(args, traces):
         print(f"\nProfile saved to: {profile_path}", file=sys.stderr)
 
 
-def run_launches(args, traces):
-    """Run torch.profiler to summarize kernel launches."""
-    import torch
-    from torch.profiler import ProfilerActivity, profile
-
-    from flashinfer_bench.bench.evaluators.utils import allocate_outputs
-    from flashinfer_bench.bench.utils import gen_inputs
-    from flashinfer_bench.compile import BuilderRegistry
-
-    os.environ.setdefault("TRITON_CACHE_DIR", str(PROJECT_ROOT / ".triton_cache"))
-
-    indexed = filter_workloads(traces, args.indices, args.group_values, args.exclude_group_values)
-    if not indexed:
-        print("Error: No workloads match the specified filters.", file=sys.stderr)
-        sys.exit(1)
-
-    trace_set_path = get_trace_set_path()
-    trace_set = TraceSet.from_path(trace_set_path)
-
-    print("Packing solution from source files...")
-    solution_path = pack_solution()
-    solution = Solution.model_validate_json(solution_path.read_text())
-    definition = trace_set.definitions[solution.definition]
-
-    registry = BuilderRegistry.get_instance()
-    runnable = registry.build(definition, solution)
-
-    for idx, trace in indexed:
-        workload = trace.workload
-        axes_str = ", ".join(f"{k}={v}" for k, v in sorted(workload.axes.items()))
-        print(f"\n{'=' * 60}")
-        print(f"Workload {idx}: {workload.uuid[:8]}  ({axes_str})")
-        print(f"{'=' * 60}")
-
-        device = "cuda:0"
-        inputs = gen_inputs(definition, workload, device)
-        outputs = allocate_outputs(definition, inputs, device)
-
-        # Warmup
-        with torch.no_grad():
-            runnable.call_destination_passing(*inputs, *outputs)
-        torch.cuda.synchronize()
-
-        # Regenerate for profiling run
-        inputs = gen_inputs(definition, workload, device)
-        outputs = allocate_outputs(definition, inputs, device)
-
-        with profile(activities=[ProfilerActivity.CUDA], record_shapes=True) as prof:
-            with torch.no_grad():
-                runnable.call_destination_passing(*inputs, *outputs)
-            torch.cuda.synchronize()
-
-        events = prof.key_averages()
-        cuda_events = [e for e in events if e.self_cuda_time_total > 0]
-        total_launches = sum(e.count for e in cuda_events)
-        total_cuda_us = sum(e.self_cuda_time_total for e in cuda_events)
-
-        print(f"Total CUDA kernel launches: {total_launches}")
-        print(f"Total CUDA time: {total_cuda_us / 1000:.3f} ms")
-        print()
-        print(events.table(sort_by="cuda_time_total", row_limit=args.max_lines if args.max_lines and args.max_lines > 0 else 50))
-
-    runnable.cleanup()
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="NCU profiler / kernel launch analyzer",
+        description="NCU profiler",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
   python scripts/run_local_profile.py --list                         # list workloads
   python scripts/run_local_profile.py --index 0                     # NCU profile workload 0
   python scripts/run_local_profile.py --index 0 --set full          # full metrics
-  python scripts/run_local_profile.py --index 0 --launches          # quick launch summary
-  python scripts/run_local_profile.py --index 0,3,5 --launches      # batch launch summary
-  python scripts/run_local_profile.py --index 0-4 --launches        # range
   python scripts/run_local_profile.py --list --exclude-group 1,14107  # filtered list
   python scripts/run_local_profile.py --ncu-options                  # list NCU sets/sections
 """,
@@ -236,8 +167,6 @@ def main():
                         help="Exclude by group axis values (e.g. 1,14107)")
 
     # Mode
-    parser.add_argument("--launches", action="store_true",
-                        help="Quick kernel launch summary via torch.profiler (instead of NCU)")
     parser.add_argument("--ncu-options", action="store_true",
                         help="List available NCU sets and sections")
 
@@ -269,10 +198,7 @@ def main():
         list_workloads(traces, args.indices, args.group_values, args.exclude_group_values)
     elif args.indices is not None:
         _, traces = load_workloads()
-        if args.launches:
-            run_launches(args, traces)
-        else:
-            run_ncu(args, traces)
+        run_ncu(args, traces)
     else:
         parser.print_help()
         sys.exit(1)
