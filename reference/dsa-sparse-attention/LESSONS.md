@@ -1,13 +1,28 @@
 # DSA Sparse Attention — Lessons
 
-Distilled from 84 iterations across three sub-envs
-(`ako4fib-run-dsa-attn/`, `ako4fib-run-dsa-attn-v2/`, `ako4fib-run-dsa-sparse-b200-v4/`).
-Keep this short. Raw iteration logs live in each sub-env's `ITERATIONS.md`.
+Distilled from 104 iterations across four sub-envs
+(`ako4fib-run-dsa-attn/`, `ako4fib-run-dsa-attn-v2/`, `ako4fib-run-dsa-sparse-b200-v4/`,
+`ako4fib-run-dsa-sparse-b200-v5/`). Keep this short. Raw iteration logs
+live in each sub-env's `ITERATIONS.md`.
 
-**tl;dr:** the single biggest lever is replacing the Triton reduce with a
-**CuTe DSL reduce** (section "CuTe DSL reduce breakthrough" below) — that
-one change turned a 47.43x kernel into a **70.46x kernel** (+23x). Skip
-everything else and try that first on any new sub-env.
+**tl;dr:** two big levers, in order:
+1. Replace the Triton reduce with a **CuTe DSL reduce** (v4 iter 25–26, the
+   "CuTe DSL reduce breakthrough" section below). This turned a 47.43x kernel
+   into a 70.46x kernel (+23x). **Skip everything else on any new sub-env
+   and start from `variants/cute_reduce_v5.py`.**
+2. **Split the CuTe reduce's fused inner loop into two unrolled passes**
+   (one for l_g, one for acc) so nvcc can interleave 32 PO loads with the
+   FMA backbone (v5 iter 1, +1.51x on v5 baseline). Applied in
+   `variants/cute_reduce_v5.py`. The compiler CSEs the duplicated
+   `exp(m - m_g)` across both passes, so the "redundant" source-level
+   compute is free.
+
+After these two, the reduce kernel is a **tight local optimum** — v5
+sessions 1–2 (20 iterations) confirmed every attempt at further tweaks
+(rmem caching, SMEM staging, cp.async prefetch, N-way acc splits, param
+sweeps) either ties or regresses. Further gains require a structural
+change — full CuTe DSL fwd + cooperative-launch fusion — which was not
+completed on v5 and is flagged as next-session work.
 
 ## Operator & shape
 
@@ -27,20 +42,31 @@ everything else and try that first on any new sub-env.
 
 - **Expert baseline** (cached, profiled on a different GPU): ~0.53 ms.
   Score = expert_latency / our_latency so ~10 µs → ~47x; ~5 µs → ~100x.
-- **Best kernel today**: `cute_reduce` at **70.46 ± 0.32x** (5-run on v4).
-  505 LOC. Same hybrid dual-NS fwd as before (Triton T<3 / TileLang T≥3),
-  but **reduce replaced by a CuTe DSL kernel**. T=1 breaks 100x for the
-  first time. CUDA graph cache + tensor-identity fast path.
+- **Best kernel today**: `cute_reduce_v5` at **71.05 ± 0.31x** (5-run
+  variance-check on v5). 523 LOC. Same hybrid dual-NS fwd as before
+  (Triton T<3 / TileLang T≥3), **reduce is a CuTe DSL kernel with the
+  fused single-loop split into two unrolled passes** (one l_g, one acc).
+  T=1 = 100.79 ± 0.62x (consistently >100 across all 5 variance-check runs).
+  CUDA graph cache + tensor-identity fast path.
+- **Prior best**: `cute_reduce` at 70.46 ± 0.32x (505 LOC, v4 iter 25–29).
+  Same hybrid fwd + CuTe DSL reduce, but with the fused single-loop form
+  before the iter-1 split. Retained as comparison baseline.
 - **Previous best**: `hybrid_dual_ns` at 47.43 ± 0.11x (377 LOC). Retained
   as fallback and as comparison baseline for the CuTe breakthrough.
-- **Latency breakdown at T=1 on the new kernel (≈5.4 µs total)**:
+- **Latency breakdown at T=1 on the current kernel (≈5.4 µs total)**:
   - CUDA graph replay overhead: ~3 µs (hardware fixed, dominant now).
   - Fwd split-K kernel (32 blocks Triton): ~1.5 µs. Still HBM-gather bound.
   - Reduce kernel (CuTe DSL, 64 blocks): ~0.9 µs. Was ~2 µs with Triton.
-- **Across-run noise floor**: CV ≈ 0.1–0.2% on v2/v3, ~0.5–0.9% on v4.
-  Treat ≤0.2x as noise on v2/v3 envs; ≤1x as noise on v4-style envs.
-  v4 variance is ~5x higher likely because Modal B200 GPU/thermal state
-  is less consistent in the new env bootstrap.
+- **Across-run noise floor**: CV ≈ 0.1–0.2% on v2/v3, ~0.5–0.9% on v4,
+  0.04–0.44% on v5 (tight at baseline, loosens as absolute score climbs).
+  Treat ≤0.2x as noise on v2/v3 envs; ≤0.5x as noise on v4/v5 envs.
+  v4/v5 variance is ~5x looser than v2/v3 likely because Modal B200 GPU/
+  thermal state is less consistent in the newer env bootstraps.
+- **Single-run vs variance-check honesty**: on v5, single-run noise std
+  is ~0.3x — *the same order as every surviving micro-opt*. Three separate
+  kernel variants (iter 6/10/13) passed single-run bench and looked like
+  wins until a 5-run variance-check revealed them as −1.4 to −2.0x real
+  regressions. **Never accept a sub-1x change without `--variance-check 5`.**
 
 ## Architectural pivots that worked
 
@@ -128,6 +154,134 @@ That gives grid `(T, 16, 4)` with 128 threads/block, 1 D element/thread.
 - Routing T=6 through Triton fwd on top of CuTe reduce: still −10x at T=6
   (TileLang NS=16/BI=128 fwd is strictly better than Triton NS=32 at mid-T,
   even when reduce is fast).
+
+## CuTe DSL reduce — iter-1 split-loop refinement (v5 iter 1, 2026-04-18) → 71.05x
+
+A pure source-level refactor on top of the v4 CuTe DSL reduce: split the
+fused single-loop into two unrolled passes, one building `l_g` from PM/PL,
+one building `acc` from PO.
+
+```python
+# BEFORE (v4 cute_reduce.py, single-loop fused):
+l_g = cutlass.Float32(0.0)
+acc = cutlass.Float32(0.0)
+for s in cutlass.range_constexpr(NS):
+    m_val = cutlass.Float32(PM[tok, s, hd])
+    w_s   = cute.math.exp(m_val - m_g)
+    l_g   = l_g + w_s * cutlass.Float32(PL[tok, s, hd])
+    acc   = acc + w_s * cutlass.Float32(PO[tok, s, hd, d])
+
+# AFTER (v5 cute_reduce_v5.py, two unrolled passes):
+l_g = cutlass.Float32(0.0)
+for s in cutlass.range_constexpr(NS):
+    m_val = cutlass.Float32(PM[tok, s, hd])
+    l_val = cutlass.Float32(PL[tok, s, hd])
+    l_g = l_g + cute.math.exp(m_val - m_g) * l_val
+
+acc = cutlass.Float32(0.0)
+for s in cutlass.range_constexpr(NS):
+    m_val = cutlass.Float32(PM[tok, s, hd])
+    w_s = cute.math.exp(m_val - m_g)
+    o_val = cutlass.Float32(PO[tok, s, hd, d])
+    acc = acc + w_s * o_val
+```
+
+**Why it works.** The fused loop chains every `acc += w*o` FMA to the
+previous FMA on the `acc` accumulator. Each PO load must wait for the
+prior FMA to retire before the next load can issue. Separating into two
+passes gives nvcc a clean pure-load-accumulate pattern for the 32 PO
+reads that it can pipeline against the FMA backbone independently.
+
+**The "duplicated" `exp(m_val - m_g)` is free.** The compiler CSEs it
+across both passes — no wasted arithmetic.
+
+**Measured gain (v5):**
+- **Net +1.51x over v5 re-measured baseline (69.54 ± 0.04x).**
+- Headline +0.45x single-run, +1.51x in 5-run variance-check, ~12× the
+  v5 noise floor.
+- Biggest at low T: T=1 +0.40x, T=2 +1.11x. T≥6 is HBM-bound, so reduce
+  micro-opts don't move it.
+
+## v5 exhausted levers (2026-04-18, 20 iterations across 2 sessions)
+
+After applying the iter-1 split-loop and settling at 71.05 ± 0.31x, the
+CuTe DSL reduce became a tight local optimum. **Every further attempt
+either tied within noise or regressed.** Don't re-run these on any new
+sub-env:
+
+- **rmem tensor caching of weights** (iter 2, 6, 10, 11, 12, 13):
+  `cute.make_rmem_tensor((NS,), cutlass.Float32)` + `.fill(0.0)` + hoist
+  `exp(PM[s] - m_g)` into the rmem tensor. Passed at single-run bench
+  (70.4–70.6x) for iter 6/10/13, but a 5-run variance-check revealed
+  iter-13 at 69.02 ± 0.11x vs the pure-exp form at 71.05 ± 0.31x. That's
+  **−2.03x real, hidden by single-run noise.** Root cause: init + spill
+  overhead exceeds the saved exp recompute (which nvcc CSEs anyway).
+  Adding a second rmem tensor (iter 11/12/13/14 for PL / PO / combined)
+  always regressed further due to register spill to local memory.
+  **Conclusion: only ONE NS-sized rmem tensor fits in the reduce without
+  spilling; even that is net-negative.** Prefer no rmem caching.
+- **`cute.make_rmem_tensor` does NOT zero-initialize** on
+  `nvidia-cutlass-dsl>=4.3.4` (v5 Modal image). Without explicit
+  `.fill(0.0)`, one T=6 TileLang-path workload (`385742b2`) hits
+  `INCORRECT_NUMERICAL` because the compiler reorders weight-reads in
+  pass 2 across some weight-writes in pass 1. Fix is simple
+  (`weights.fill(0.0)` after `make_rmem_tensor`) — but prefer no rmem
+  tensor in the reduce at all (see above).
+- **Sync SMEM staging of PO** (v5 iter 18): cooperatively load PO tile
+  into SMEM via regular `sPO[s, tid] = PO[...]` + `sync_threads()`, then
+  acc loop reads SMEM. Measured: **−1.43x** (T=1 −2.49, T=2 −3.86).
+  Adds 32 SMEM writes + 1 barrier + 32 SMEM reads per thread without
+  eliminating GMEM reads. Breaks nvcc's interleaved GMEM/FMA schedule.
+  **Lesson: adding sync without async overlap is pure overhead.**
+- **cp.async PO prefetch via full tiled_copy** (v5 iter 19b): real
+  async overlap attempt. Built `cute.make_copy_atom(cpasync.CopyG2SOp(
+  cache_mode=cpasync.LoadCacheMode.GLOBAL), bf16, num_bits_per_copy=128)`,
+  thread layout `(D_CHUNK//16, 16)` + val layout `(1, 8)`,
+  `cute.make_tiled_copy_tv(...)`, `cute.local_tile(PO[tok, None, hd, None],
+  (NS, D_CHUNK), (0, dc))`, `thr_copy.partition_S/D`, `cute.copy(...)` +
+  `cp_async_commit_group()` / `cp_async_wait_group(0)` / `sync_threads()`.
+  Required `from_dlpack(tensor, assumed_align=16)` for 128-bit src ptr
+  alignment. Compiled + correct on B200 Modal image. **Measured: −1.35x**
+  (T=1 −2.23, T=2 −3.73, T≥6 flat). At only 64 blocks on 148 SMs, the
+  reduce is **grid-size-limited** (6.27% achieved occupancy per NCU), not
+  latency-limited. The baseline's FMA/GMEM interleave already hides
+  latency via intra-block ILP; cp.async machinery adds serialized overhead
+  (commit → wait → sync) that exceeds the ~0.3–0.5 µs of PO-load latency
+  that could be overlapped with the m_g/l_g compute.
+  - **Silver lining**: the tiled_copy scaffolding compiles + runs correctly
+    on B200 Modal image with bf16 PO. **This is the hard part of writing
+    a future CuTe DSL fused fwd+reduce kernel** — reuse the pattern.
+- **N-way acc split for ILP** (v5 iter 17, 20): 2-way split was flat
+  (+0.07x, 0.25× std — nvcc already reassociates the FMA chain at SASS
+  level). 4-way split regressed **−1.76x uniformly** due to register spill
+  (4 acc regs + per-iter m/o intermediates overflow the budget).
+  **The 1-accumulator baseline is the register-budget optimum.**
+- **D_CHUNK sweep re-test** (v5): D_CHUNK=64 (97.95x T=1) and D_CHUNK=256
+  (97.50x T=1) both worse than D_CHUNK=128's 99.9–100.5x, confirming
+  v4's sweep result on v5 env.
+- **Triton num_warps sweep re-test** (v5 iter 7/7b): num_warps=4 gave
+  T=1=96.4, T=2=83.3 (regressed). num_warps=16 crashed T=1 smoke to 83x.
+  8 remains optimal.
+- **TileLang params re-test** (v5 iter 8/9): BI=64/NI=2 regressed T=6/8
+  by 1.7–3.9x. `TL_DISABLE_WARP_SPECIALIZED=True` hit RUNTIME_ERROR on
+  all T≥6 — the current TileLang kernel relies on warp-spec.
+- **evict_first cache hints on Triton** (v5 iter 4): −0.47x uniform;
+  nvcc's default cache schedule is already near-optimal, hints perturb
+  it negatively. Don't retry on this kernel.
+
+## NCU profile of the v5 reduce kernel at T=1 (for future-session tuning)
+
+- 48 regs/thread, 128 threads/block, 0 KB SMEM.
+- Block Limit Registers = 10 per SM (not binding — only 64 blocks total
+  across 148 SMs).
+- Achieved Occupancy: **6.27%** (theoretical 62.5% — limited by small grid).
+- SM Active Cycles / Elapsed Cycles: 4941 / 17536 = **28% active**.
+- Memory Throughput: 35.54 GB/s (out of ~8 TB/s HBM peak = 0.4%).
+
+**Diagnosis: grid-parallelism-limited.** Most SMs idle. The 72% inactive
+time is kernel-launch and wind-down overhead, not memory/compute stalls.
+The ONLY meaningful lever for this specific kernel is to **eliminate
+the kernel launch entirely** by fusing with the fwd.
 
 **Gotchas in CuTe DSL we hit** (v4 iter 14, 20, 23):
 - `allocator.allocate_array(dtype, num_elems)` returns a `_Pointer` — does
@@ -236,39 +390,63 @@ on ~30 internal modules. But the v4 reduce breakthrough showed that a
 much simpler probe-style pattern (~70 LOC, no layout/tiled-copy/MMA
 machinery) can beat Triton for kernels that aren't tensor-core-bound.
 
-## What remains untried (post v4 iter 36)
+## What remains untried (post v5 session 2)
 
-- **CuTe DSL fwd.** The reduce win re-opens this. Now that we know the
-  simple probe-style pattern beats Triton for launch-bound kernels, a
-  CuTe fwd — even at first without tensor cores for the MMA, or with
-  `cute.gemm` atoms for the MMA and probe-style for everything else —
-  is worth trying. Expected: T=1 100x → 120-140x, T=8 58x → 65-75x.
-  Fwd is harder because of the gather + softmax + MMA pipeline, but
-  the winning pattern (direct `A[i, j, k]` indexing, `cute.math.exp`,
-  `cutlass.range_constexpr`) is the same.
-- **cp.async pipelining of the po load in the CuTe reduce.** The current
-  reduce has each thread issue 32 sequential po loads. `cute.arch.cp_async_*`
-  primitives + a double-buffered SMEM staging could overlap load with
-  compute. Tried briefly (v4) but `allocate_array` returns a non-indexable
-  pointer — use `cute.make_tensor(ptr, layout)` to get a writable handle.
-  Expected: +0.5 to +1 µs on the reduce, i.e. T=1 100x → ~115x.
-- **Persistent kernel with cooperative grid-wide reduce.** Still worth
-  ~3 µs of CUDA-graph replay overhead if you eliminate the 2-kernel
-  design. Blocked on Triton not having grid sync; CuTe DSL has it via
-  cluster launches (max size 8) or cooperative kernel launches.
-- **FP8 data path.** Unchanged from v3 — cast `ckv_cache` / `kpe_cache`
-  to FP8 at prefill time (outside our scope), gather shrinks 2x, MMA in
-  BF16 via CUTLASS mixed-precision tensor cores. This is FA4's direction.
-  Changes the KV cache format → system-level decision, not a kernel tweak.
+- **CuTe DSL fwd using `warp.MmaF16BF16Op` tensor cores.** The real
+  remaining structural lever. Expected: T=1 100x → 120-140x, T=8 58x →
+  65-75x. Build deps confirmed on v5 Modal image. Start from
+  `ampere/flash_attention_v2.py` (1344 LOC) and simplify aggressively.
+  Core primitives:
+  ```
+  cute.make_copy_atom(cpasync.CopyG2SOp(cache_mode=LoadCacheMode.GLOBAL),
+                      bf16, num_bits_per_copy=128)
+  cute.make_tiled_copy_tv(atom, thr_layout, val_layout)
+  warp.MmaF16BF16Op(bf16, Float32, (16, 8, 16))
+  cute.make_tiled_mma(op, (num_threads // 32, 1, 1), permutation_mnk=...)
+  cute.gemm(tiled_mma, acc, fragA, fragB, acc)
+  ```
+  Scope estimate: 300-500 LOC before first compile; 2-4 iterations
+  to correctness; several more to match Triton's 1.5 µs fwd time.
+  **cp.async tiled_copy infrastructure from v5 iter 19b is the foundation
+  — it validated compile+correctness on B200 Modal image with bf16 and
+  assumed_align=16.**
+- **Cooperative-launch fused fwd+reduce via `cute.arch.cooperative=True`
+  + `GlobalBarrier`.** Grid-wide sync is viable at low T: for T=1 the
+  cooperative grid is 32 blocks (NS=32), well under the B200 148-block
+  cooperative launch max. Primitives verified (see
+  `ampere/cooperative_launch.py`). Viability depends on the CuTe DSL
+  fwd above. Expected: eliminate the ~0.9 µs reduce kernel plus some of
+  the ~3 µs CUDA-graph-replay overhead → T=1 toward 130-150x.
+- **`tcgen05.MmaF16BF16Op` (Blackwell async MMA)** via the pattern in
+  `blackwell/tutorial_gemm/fp16_gemm_0.py` (`TmemAllocator`,
+  `PipelineTmaUmma`). Potentially faster than Ampere-style warp MMA on
+  B200 but more complex. Do warp-MMA first.
+- **FP8 data path.** Unchanged — cast `ckv_cache` / `kpe_cache` to FP8
+  at prefill time (outside our scope), gather shrinks 2x, MMA in BF16
+  via CUTLASS mixed-precision tensor cores. System-level decision, not
+  a kernel tweak.
 
 ## Operational notes for the next session
 
-- **Always start from `variants/cute_reduce.py`**, not `hybrid_dual_ns.py`.
-  The CuTe DSL reduce is a +23x free lunch and there is no downside
-  (same deps — `triton + tilelang + cutlass-dsl`).
-- v4 Modal B200 environments have higher across-run variance than v2/v3
-  (CV ~0.5-0.9% vs 0.1-0.2%). Don't waste iterations on ≤0.5x moves;
-  ≥1.5x is the detection threshold for real signal.
-- On a fresh env, run `bash scripts/bench.sh --variance-check 5` first
-  with the byte-identical `variants/cute_reduce.py` to establish the
-  env's noise floor before iterating.
+- **Always start from `variants/cute_reduce_v5.py`** (not `cute_reduce.py`
+  or `hybrid_dual_ns.py`). The CuTe DSL reduce + iter-1 split-loop is a
+  free +23x + +0.5x over everything that came before; same deps
+  (`triton + tilelang + cutlass-dsl --no-deps`).
+- v4/v5 Modal B200 environments have higher across-run variance than v2/v3
+  (CV 0.4–0.9% vs 0.1–0.2%). **Do not accept sub-1x changes on single-run
+  bench** — single-run noise on v5 is ~0.3x, same order as every surviving
+  micro-opt, and three separate kernel variants passed single-run but
+  regressed in variance-check during v5 sessions 1–2.
+- **Always run `bash scripts/bench.sh --variance-check 5`** before
+  accepting or rejecting any change that looks ≤1x. Tracks noise floor
+  to `trajectory/noise-floor.json`.
+- **Don't re-attempt** these on a fresh env — all tried on v5, all
+  regressed: rmem tensor caching of weights (any form), sync SMEM
+  staging of PO, cp.async PO prefetch via tiled_copy, N-way acc split
+  ≥ 4, D_CHUNK ≠ 128, Triton num_warps ≠ 8, TileLang BI=64 or
+  warp-spec-disabled or num_stages=2, evict_first cache hints, 2-heads-
+  per-block reduce. See "v5 exhausted levers" section above for details.
+- The remaining real lever is a **CuTe DSL fwd + cooperative fusion** —
+  500+ LOC scope, multiple iterations to get compile+correct, reuse the
+  cp.async tiled_copy scaffolding from v5 iter 19b. See "What remains
+  untried" section above.
