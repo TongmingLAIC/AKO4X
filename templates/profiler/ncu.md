@@ -30,8 +30,11 @@ bash scripts/profile.sh --index 5 --kernel-name "my_kernel"
 # Combine options
 bash scripts/profile.sh --index 5 --set full --page raw --kernel-name ".*gemm.*"
 
-# List available NCU sets and sections
+# List available NCU sets and sections (on the image that will run the profile)
 bash scripts/profile.sh --ncu-options
+
+# Add specific sections on top of the --set preset (comma-separated, NCU section names)
+bash scripts/profile.sh --index 5 --sections LaunchStats,Occupancy
 
 # Increase timeout for complex kernels (default: 60s)
 bash scripts/profile.sh --index 5 --timeout 120
@@ -39,6 +42,20 @@ bash scripts/profile.sh --index 5 --timeout 120
 # Limit output length
 bash scripts/profile.sh --index 5 --max-lines 200
 ```
+
+### Ad-hoc Sections — Discover → Select
+
+`--set` picks one of NCU's built-in presets (`basic` / `detailed` / `full` / …). `--sections` is orthogonal: it collects additional named sections on top of the preset. To decide which sections to request:
+
+```bash
+# Step 1: enumerate what the image's NCU version exposes
+bash scripts/profile.sh --ncu-options     # prints `ncu --list-sets` + `ncu --list-sections`
+
+# Step 2: collect only the sections you need
+bash scripts/profile.sh --index 5 --sections <name1>,<name2>,...
+```
+
+Section names on the Modal B200 image typically include `LaunchStats`, `Occupancy`, `SchedulerStats`, `WarpStateStats`, `MemoryWorkloadAnalysis`, `ComputeWorkloadAnalysis`, `SourceCounters`, `InstructionStats`, etc. — the exact list varies by NCU version, so always confirm via `--ncu-options` before relying on a name.
 
 ## Workload Selection
 
