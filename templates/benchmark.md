@@ -114,18 +114,18 @@ Trajectory is still saved for all filter modes, so you can inspect `results.json
 ## Variance Check (`--variance-check N`)
 
 ```bash
-bash scripts/bench.sh --variance-check 3   # 1 warmup + 3 measured runs
+bash scripts/bench.sh --variance-check 3   # run unchanged solution 3 times
 ```
 
-Runs **1 warmup + N measured runs** of the same unchanged solution back-to-back. The warmup run is always performed and always discarded from the aggregate — across v3/v4/v5 sessions the first run consistently shows a 0.3–0.6x downward bias (Modal container cold-start, Triton JIT cache cold, GPU thermal ramp). Its score is printed for visibility (`Warmup score: X.XXx (discarded)`) but not included in mean/std.
+Runs the **same unchanged solution N times** back-to-back to measure across-run noise (Modal cold-start, GPU thermal effects, neighbour load). Reports:
 
-Reports on the N measured runs:
-
-- **Overall**: mean / std / CV / range.
+- **Overall**: mean / std / CV / range across the N runs.
 - **Top 5 most variable workloads** (by CV), so you can identify outliers.
 - **Per-group noise** (e.g., `batch_size=1: 46.28 ± 0.12x (CV 0.3%)`, …): lets you see whether noise is spread evenly or concentrated in one group — useful when deciding whether a group-specific speedup change is real.
 
-Cost: `(N + 1) × bench`. Result is saved to `trajectory/noise-floor.json` (fields: `scores`, `score_mean/std/cv`, `per_workload`, `per_group`, `group_axis`).
+Useful when you suspect run-to-run noise is large enough to confuse iteration decisions. Runs N times → costs `N × bench`. Result is saved to `trajectory/noise-floor.json` (fields: `scores`, `score_mean/std/cv`, `per_workload`, `per_group`, `group_axis`) so you can refer back to it when interpreting future score deltas.
+
+> **Cold-start note.** The very first run after a fresh Modal container (empty JIT cache, GPU not yet at steady temperature, cuBLAS/CUTLASS not yet lazy-initialized) often scores noticeably lower than subsequent runs. If that bias would confuse your comparison, run a throwaway `bash scripts/bench.sh` (any mode) before `--variance-check N` so the loop starts in steady state. Use your judgement — this is not applied automatically.
 
 ## Error Diagnostics
 
