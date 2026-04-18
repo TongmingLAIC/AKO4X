@@ -4,8 +4,8 @@ FlashInfer-Bench Compute-Sanitizer Runner (Local Backend).
 Thin wrapper around flashinfer_bench_run_sanitizer. Requires a host
 `compute-sanitizer` binary on PATH (ships with CUDA toolkit). `--tool`
 forwards to the `sanitizer_types` argument; `all` passes None (runs all
-four). Output is post-processed by _summarize_noise to surface a
-"NOISE FILTER" banner before the raw sanitizer text.
+four). Output is post-processed by summarize_sanitizer_noise to surface
+a "NOISE FILTER" banner before the raw sanitizer text.
 """
 
 import argparse
@@ -21,44 +21,16 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from flashinfer_bench import Solution, TraceSet
 from flashinfer_bench.agents import flashinfer_bench_run_sanitizer
-from scripts.bench_utils import find_group_axis, get_trace_set_path, parse_int_filter
+from scripts.bench_utils import (
+    find_group_axis,
+    get_trace_set_path,
+    parse_int_filter,
+    summarize_sanitizer_noise,
+)
 from scripts.pack_solution import pack_solution
 
 
 _VALID_TOOLS = ("memcheck", "racecheck", "initcheck", "synccheck", "all")
-
-
-def _summarize_noise(output: str) -> str:
-    """Prepend a banner explaining benign cuGetProcAddress_v2 library-init noise.
-
-    compute-sanitizer logs every CUDA driver symbol probe done by PyTorch /
-    triton / cupti at import time. These are not kernel errors and not
-    caused by the solution.
-    """
-    import re
-    noise_count = len(re.findall(
-        r"Program hit CUDA_ERROR_INVALID_VALUE.*?cuGetProcAddress_v2",
-        output,
-    ))
-    m = re.search(r"ERROR SUMMARY: (\d+) errors?", output)
-    total = int(m.group(1)) if m else None
-
-    if noise_count == 0:
-        return output
-    if total is not None:
-        real = max(total - noise_count, 0)
-        real_str = f"{real} apparently-real kernel hit{'s' if real != 1 else ''}"
-    else:
-        real_str = "unknown remaining hits (no ERROR SUMMARY parsed)"
-    banner = (
-        "\n>>> NOISE FILTER <<<\n"
-        f"    {noise_count} of the reported hits are benign `cuGetProcAddress_v2` probes\n"
-        "    from Python library init (PyTorch / triton / cupti probing driver\n"
-        "    entry points). They are NOT caused by your kernel.\n"
-        f"    Likely real signal: {real_str}.\n"
-        "    See docs/sanitizer/sanitizer.md → 'Benign library-init noise'.\n\n"
-    )
-    return banner + output
 
 
 def load_workloads():
@@ -157,7 +129,7 @@ def run_sanitizer(args, traces):
             kwargs["max_lines"] = args.max_lines
 
         result = flashinfer_bench_run_sanitizer(solution, workload, **kwargs)
-        print(_summarize_noise(result))
+        print(summarize_sanitizer_noise(result))
 
         san_dir = PROJECT_ROOT / "sanitizer"
         san_dir.mkdir(exist_ok=True)

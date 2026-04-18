@@ -126,9 +126,7 @@ def main(label: str = None, force_baseline: bool = False, quiet: bool = False,
     --variance-check N: run the same unchanged solution N times to measure
     across-run noise (~N times bench cost). Result saved to trajectory/noise-floor.json.
     """
-    # Line-buffer stdout so per-run progress prints (e.g. "Run i/N score: ...")
-    # stream to the caller even when this process's stdout is piped to tail / file.
-    # Without this, a ~15-min variance-check is silent until it completes.
+    # Line-buffer stdout so progress prints stream to caller when piped.
     sys.stdout.reconfigure(line_buffering=True)
 
     from functools import partial

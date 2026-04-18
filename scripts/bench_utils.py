@@ -1014,3 +1014,40 @@ def save_trajectory(
         json.dump(trajectory_data, f, indent=2)
 
     print(f"\nTrajectory saved to: {run_dir}")
+
+
+# ---------------------------------------------------------------------------
+# Sanitizer output post-processing
+# ---------------------------------------------------------------------------
+
+def summarize_sanitizer_noise(output: str) -> str:
+    """Prepend a banner explaining benign cuGetProcAddress_v2 library-init noise.
+
+    compute-sanitizer logs every CUDA driver symbol probe done by PyTorch /
+    triton / cupti at import time. These are not kernel errors and not
+    caused by the solution.
+    """
+    import re
+    noise_count = len(re.findall(
+        r"Program hit CUDA_ERROR_INVALID_VALUE.*?cuGetProcAddress_v2",
+        output,
+    ))
+    m = re.search(r"ERROR SUMMARY: (\d+) errors?", output)
+    total = int(m.group(1)) if m else None
+
+    if noise_count == 0:
+        return output
+    if total is not None:
+        real = max(total - noise_count, 0)
+        real_str = f"{real} apparently-real kernel hit{'s' if real != 1 else ''}"
+    else:
+        real_str = "unknown remaining hits (no ERROR SUMMARY parsed)"
+    banner = (
+        "\n>>> NOISE FILTER <<<\n"
+        f"    {noise_count} of the reported hits are benign `cuGetProcAddress_v2` probes\n"
+        "    from Python library init (PyTorch / triton / cupti probing driver\n"
+        "    entry points). They are NOT caused by your kernel.\n"
+        f"    Likely real signal: {real_str}.\n"
+        "    See docs/sanitizer/sanitizer.md → 'Benign library-init noise'.\n\n"
+    )
+    return banner + output
