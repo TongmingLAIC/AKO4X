@@ -3,6 +3,15 @@
 Curated links for the next optimization session. Organized so you can jump
 to exactly the bit you need.
 
+**For the CuTe DSL radix port (highest-EV untried lever)**: read the
+sibling op's `reference/dsa-sparse-attention/variants/cute_reduce.py`
+first. The `_cute_reduce_kernel` at L380-414 is a ~50-LOC working CuTe
+DSL kernel that demonstrates the exact pattern (scalar fp32 loops,
+`cutlass.Float32(value)` casts, `cute.math.exp/log`, no layout/MMA
+machinery, lazy compile via `cute.compile`). The sibling's full LESSONS.md
+section "CuTe DSL reduce breakthrough" covers the *why* (launch-bound
+kernels are CuTe DSL's sweet spot, not compute-bound MMA).
+
 ## Operator & reference implementations
 
 The exact operator we optimize. The reference Python implementation and
@@ -97,14 +106,20 @@ finding in each radix pass.
 
 - `LESSONS.md` — distilled trajectory. Start here before proposing
   anything radical.
-- `VARIANTS.md` — 2 preserved kernels with vc3 variance data.
-- `variants/graph_cached.py` (41.35 ± 0.16x) — current production kernel.
+- `VARIANTS.md` — 3 preserved kernels with variance data.
+- `variants/warp_coop_v3.py` (peak 41.99x, range 41.12-41.99 across
+  v3 sessions) — recommended starting point. Adds warp-coop radix
+  gather/hist + warp-only scan + BT=128 on top of graph_cached.
+- `variants/graph_cached.py` (41.35 ± 0.16x) — v2-stable baseline.
 - `variants/no_graph.py` (~32.7x) — fallback / illustrates graph's
   contribution.
 - **`reference/dsa-sparse-attention/`** — sibling operator's distillation
-  (47.43x hybrid kernel). Same Modal B200 backend, similar harness, same
-  `--variance-check` methodology. Cross-reference for patterns that
-  transfer across DSA operators.
+  (best: `cute_reduce_v5.py` at 71.05 ± 0.31x; previous: `cute_reduce.py`
+  at 70.46x; pre-CuTe-DSL: `hybrid_dual_ns.py` at 47.43x). Same Modal
+  B200 backend, similar harness, same `--variance-check` methodology.
+  **The CuTe DSL reduce kernel pattern in `cute_reduce.py` (~70 LOC,
+  no layout/MMA machinery) is the template for porting our radix to
+  CuTe DSL** — see LESSONS.md *What remains untried*.
 
 ## Benchmark / infra references
 
