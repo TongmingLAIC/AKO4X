@@ -70,6 +70,18 @@ def run_ncu_remote(solution: Solution, workload: Workload, ncu_kwargs: dict) -> 
     )
 
 
+@app.function(image=image, gpu=f"{_GPU_TYPE}:1", timeout=120)
+def list_ncu_options_remote() -> str:
+    """Query `ncu --list-sets` + `--list-sections` on the Modal image.
+
+    Run this on Modal (not locally) because the Modal image has `ncu`
+    pre-installed; most local dev hosts don't. Sections vary by ncu
+    version, so the Modal answer is what the agent actually needs.
+    """
+    from flashinfer_bench.agents import flashinfer_bench_list_ncu_options
+    return flashinfer_bench_list_ncu_options()
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
@@ -136,17 +148,17 @@ def _list_workloads(entries, indices=None, group_values=None, exclude_group_valu
 
 
 def _list_ncu_options():
-    """List available NCU sets and sections."""
+    """List available NCU sets and sections — queries the Modal image's ncu."""
     import shutil as _shutil
     if _shutil.which("ncu"):
+        # Local ncu available (fast path): reports local-host sections.
+        # Caveat: may differ from the Modal image's version.
         from flashinfer_bench.agents import flashinfer_bench_list_ncu_options
         print(flashinfer_bench_list_ncu_options())
     else:
-        print("NCU not available locally. Common section sets:\n")
-        print("  basic     — Minimal: launch config, duration, memory throughput. Fast.")
-        print("  detailed  — Key metrics: compute/memory utilization, occupancy, warp stalls. (default)")
-        print("  full      — All available metrics. Slow but exhaustive.")
-        print("\nOutput pages: details (default), source, raw")
+        # Fallback: query on Modal where ncu is installed.
+        print("(Querying Modal image — ncu not available locally...)")
+        print(list_ncu_options_remote.remote())
 
 
 # ---------------------------------------------------------------------------
