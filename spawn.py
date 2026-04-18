@@ -399,23 +399,29 @@ def populate_child(child_dir, *, operator, op_type, gpu, mode, backend, kernel_p
     if expert_baseline_path:
         shutil.copy2(expert_baseline_path, child_dir / "expert_baseline.json")
 
-    # Generate backend-specific bench.sh / profile.sh and copy runner scripts
+    # Generate backend-specific bench.sh / profile.sh / sanitize.sh and copy runner scripts
     if backend == "local":
         bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local.py "$@"\n'
         profile_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local_profile.py "$@"\n'
+        sanitize_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/run_local_sanitize.py "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_local.py", child_dir / "scripts" / "run_local.py")
         shutil.copy2(PARENT_DIR / "scripts" / "run_local_profile.py", child_dir / "scripts" / "run_local_profile.py")
+        shutil.copy2(PARENT_DIR / "scripts" / "run_local_sanitize.py", child_dir / "scripts" / "run_local_sanitize.py")
     else:
         bench_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal.py "$@"\n'
         profile_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal_profile.py "$@"\n'
+        sanitize_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\nmodal run scripts/run_modal_sanitize.py "$@"\n'
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal.py", child_dir / "scripts" / "run_modal.py")
         shutil.copy2(PARENT_DIR / "scripts" / "run_modal_profile.py", child_dir / "scripts" / "run_modal_profile.py")
+        shutil.copy2(PARENT_DIR / "scripts" / "run_modal_sanitize.py", child_dir / "scripts" / "run_modal_sanitize.py")
 
     shutil.copytree(PARENT_DIR / "templates" / "profiler", child_dir / "docs" / "profiler")
+    shutil.copytree(PARENT_DIR / "templates" / "sanitizer", child_dir / "docs" / "sanitizer")
     shutil.copy2(PARENT_DIR / "scripts" / "diff_trajectory.py", child_dir / "scripts" / "diff_trajectory.py")
 
     diff_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/diff_trajectory.py "$@"\n'
-    for name, content in [("bench.sh", bench_sh), ("profile.sh", profile_sh), ("diff.sh", diff_sh)]:
+    for name, content in [("bench.sh", bench_sh), ("profile.sh", profile_sh),
+                          ("sanitize.sh", sanitize_sh), ("diff.sh", diff_sh)]:
         p = child_dir / "scripts" / name
         p.write_text(content)
         p.chmod(0o755)

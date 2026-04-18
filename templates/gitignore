@@ -12,6 +12,7 @@ __pycache__/
 # Benchmark artifacts
 trajectory/
 profiles/
+sanitizer/
 .triton_cache/
 solution.json
 baseline.json

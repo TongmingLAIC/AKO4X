@@ -20,7 +20,7 @@ Workloads: `docs/workloads.jsonl` ({{NUM_WORKLOADS}} total).
 
 ## Quick Reference
 
-GPU: {{GPU_NAME}}. Language guides: `docs/languages/`. Benchmark details: `docs/benchmark.md`. Profiler guide: `docs/profiler/ncu.md`.
+GPU: {{GPU_NAME}}. Language guides: `docs/languages/`. Benchmark details: `docs/benchmark.md`. Profiler guide: `docs/profiler/ncu.md`. Sanitizer guide: `docs/sanitizer/sanitizer.md`.
 
 Inputs are regenerated each call — do not cache value-dependent intermediates across invocations.
 
@@ -35,6 +35,8 @@ bash scripts/bench.sh --exclude-group 1,14107  # exclude specific group values
 bash scripts/bench.sh --index 0,3,5            # run specific workloads by index
 bash scripts/profile.sh --list                 # list workloads with indices
 bash scripts/profile.sh --index 5              # NCU profile a specific workload
+bash scripts/sanitize.sh --index 5             # compute-sanitizer memcheck (default)
+bash scripts/sanitize.sh --index 5 --tool initcheck  # uninitialized-memory check
 bash scripts/diff.sh                              # compare last two benchmark runs
 bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
 ```
@@ -62,5 +64,6 @@ bash scripts/diff.sh iter-9 iter-10               # compare two specific runs
    - Escape hatch: `rm .bench_pending` to force-clear (use sparingly)
 4. **When stuck or uncertain** — investigate before the next code change:
    - Profile: `bash scripts/profile.sh --index <N>` for deep NCU metrics (kernel names, occupancy, memory throughput, registers)
+   - Sanitize: `bash scripts/sanitize.sh --index <N>` (memcheck / initcheck / racecheck / synccheck) when `INCORRECT_NUMERICAL` or `RUNTIME_ERROR` cause is unclear — see `docs/sanitizer/sanitizer.md`
    - Search: WebSearch for API behavior, hardware specs, or optimization patterns
 5. Stop when no further improvements found; summarize results
