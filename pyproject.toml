@@ -59,6 +59,15 @@ cutlass-dsl = ["nvidia-cutlass-dsl>=4.3.4"]
 #
 # (or pre-install torch + ninja in the isolated env by other means.)
 deep-gemm = ["deep_gemm @ git+https://github.com/deepseek-ai/DeepGEMM.git@main ; sys_platform == 'linux'"]
+# ROCm host-side deps for AMD Instinct hardware (MI300X / MI325X / MI350X / MI355X).
+# Install via: pip install -e ".[rocm]"
+# Default install remains NVIDIA-targeted; this extra is opt-in. The ROCm flavor
+# of torch is NOT pinned here because users typically install it from AMD's wheel
+# index (`pip install torch --index-url https://download.pytorch.org/whl/rocmX.Y`)
+# or use a rocm/pytorch-* container. See docs/rocm-port-status.md for details.
+rocm = [
+    "aiter; sys_platform == 'linux'",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

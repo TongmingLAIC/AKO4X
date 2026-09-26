@@ -60,6 +60,73 @@ def parse_args():
     return parser.parse_args()
 
 
+def _detect_gpu_rocm():
+    """Probe rocm-smi for AMD Instinct GPUs. Returns (slug_lower, display_upper) or None.
+
+    Prefers `rocm-smi --showproductname --json` (stable across ROCm versions) and
+    falls back to text parsing if JSON output is unavailable. Card Series strings
+    like "AMD Instinct MI300X" / "MI325X" / "MI350X" / "MI355X" yield slugs
+    "mi300x" / "mi325x" / etc. The MI\\w+ regex matches the model token without
+    constraining to a fixed digit count, so future Instinct families are picked
+    up without code changes. Consumer Radeon cards are not auto-detected; pass
+    --gpu explicitly for those.
+
+    On mixed-vendor / mixed-card hosts (e.g. a Radeon display adapter enumerating
+    before an MI300X), we scan ALL cards for the first MI-matching series rather
+    than committing to the first card with any non-empty Card Series — otherwise
+    a leading non-Instinct device would mask the accelerator.
+    """
+    if not shutil.which("rocm-smi"):
+        return None
+    series = None
+    result = subprocess.run(
+        ["rocm-smi", "--showproductname", "--json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        # Output may be prefixed with WARNING lines; locate the JSON object.
+        m = re.search(r"\{.*\}", result.stdout, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                data = {}
+            # Scan all cards for the first MI-matching series. Case-insensitive
+            # key lookup defends against rocm-smi builds that emit "Card series"
+            # instead of "Card Series".
+            for card_key in sorted(data):
+                card_fields = data[card_key] if isinstance(data[card_key], dict) else {}
+                card_series = next(
+                    (v for k, v in card_fields.items() if k.lower() == "card series"),
+                    "",
+                )
+                if card_series and re.search(r"\bMI\w+\b", card_series):
+                    series = card_series
+                    break
+    if series is None:
+        # Fallback: text mode. Match the first MI-named card in the output;
+        # case-insensitive against the "Card Series" key in case the build emits
+        # a different casing.
+        result = subprocess.run(
+            ["rocm-smi", "--showproductname"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return None
+        m = re.search(r"Card\s+Series:\s*(.*\bMI\w+\b.*?)$",
+                      result.stdout, re.MULTILINE | re.IGNORECASE)
+        if not m:
+            return None
+        series = m.group(1).strip()
+    # Slug from the model token (e.g. "AMD Instinct MI355X" → "MI355X").
+    model = re.search(r"\b(MI\w+)\b", series)
+    if not model:
+        return None
+    slug = model.group(1).upper()
+    print(f"Auto-detected GPU: {series} (using --gpu {slug.lower()})")
+    return slug.lower(), slug
+
+
 def resolve_gpu(gpu_arg, backend):
     """Resolve GPU slug and display name. Auto-detect for local, require for modal."""
     if gpu_arg:
@@ -69,34 +136,42 @@ def resolve_gpu(gpu_arg, backend):
     if backend == "modal":
         sys.exit("Error: --gpu is required for modal backend")
 
-    # Local mode: auto-detect via nvidia-smi
-    if not shutil.which("nvidia-smi"):
-        sys.exit("Error: No GPU specified and nvidia-smi not found. Use --gpu <name>.")
+    # Local mode: auto-detect via nvidia-smi.
+    # On hosts with nvidia-smi present, behavior is identical to prior versions —
+    # the entire NVIDIA branch below is unchanged. Only when nvidia-smi is
+    # entirely absent do we fall through to the ROCm probe.
+    if shutil.which("nvidia-smi"):
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True,
+        )
+        gpu_full = result.stdout.strip().split("\n")[0].strip()
+        if not gpu_full:
+            sys.exit("Error: No GPU detected. Use --gpu <name>.")
 
-    result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-        capture_output=True, text=True,
-    )
-    gpu_full = result.stdout.strip().split("\n")[0].strip()
-    if not gpu_full:
-        sys.exit("Error: No GPU detected. Use --gpu <name>.")
-
-    # Data-center cards first (A100 / H100 / B200 / L40S / T4 / V100);
-    # fall back to consumer naming (RTX / GTX / RX <model>) which has a
-    # space between the brand and the model number.
-    dc = re.search(r"\b([ABHLTV]\d{2,3}[A-Z]*)\b", gpu_full)
-    if dc:
-        slug = dc.group(1)
-    else:
-        consumer = re.search(r"\b(RTX|GTX|RX)\s*(\d{3,4}[A-Z]*)\b", gpu_full)
-        if consumer:
-            slug = f"{consumer.group(1)}{consumer.group(2)}"
+        # Data-center cards first (A100 / H100 / B200 / L40S / T4 / V100);
+        # fall back to consumer naming (RTX / GTX / RX <model>) which has a
+        # space between the brand and the model number.
+        dc = re.search(r"\b([ABHLTV]\d{2,3}[A-Z]*)\b", gpu_full)
+        if dc:
+            slug = dc.group(1)
         else:
-            sys.exit(f"Error: Could not identify GPU model from '{gpu_full}'. Use --gpu <name>.")
+            consumer = re.search(r"\b(RTX|GTX|RX)\s*(\d{3,4}[A-Z]*)\b", gpu_full)
+            if consumer:
+                slug = f"{consumer.group(1)}{consumer.group(2)}"
+            else:
+                sys.exit(f"Error: Could not identify GPU model from '{gpu_full}'. Use --gpu <name>.")
 
-    gpu = slug.lower()
-    print(f"Auto-detected GPU: {gpu_full} (using --gpu {gpu})")
-    return gpu, slug.upper()
+        gpu = slug.lower()
+        print(f"Auto-detected GPU: {gpu_full} (using --gpu {gpu})")
+        return gpu, slug.upper()
+
+    # nvidia-smi absent → try ROCm. This is the only new exit path.
+    detected = _detect_gpu_rocm()
+    if detected is not None:
+        return detected
+
+    sys.exit("Error: No GPU specified and nvidia-smi not found. Use --gpu <name>.")
 
 
 def load_agent_config(agent):
@@ -351,10 +426,18 @@ def discover_expert_baseline(dataset_path, operator, op_type, explicit_path=""):
 
 
 def infer_language(kernel_path):
-    """Infer language from kernel file extension. Returns (language, entry_point)."""
+    """Infer language from kernel file extension. Returns (language, entry_point).
+
+    `.hip` is the AMD ROCm equivalent of `.cu` — same role (device kernels
+    compiled by hipcc) and the same convention of a sibling `binding.cpp` /
+    `binding.py` providing the host-side hook. The actual ROCm build path
+    (compile + link) is a downstream concern of the benchmark adapter; this
+    function only classifies the kernel file so downstream tooling can route.
+    """
     ext_map = {
         ".cu": ("cuda", "binding.py::kernel"),
         ".cpp": ("cpp", "binding.py::kernel"),
+        ".hip": ("hip", "binding.py::kernel"),  # ROCm device kernel; mirrors .cu's host-binding convention
         ".py": ("python", "kernel.py::run"),
     }
     kp = Path(kernel_path)
