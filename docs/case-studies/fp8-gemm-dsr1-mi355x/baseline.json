@@ -1,0 +1,55 @@
+{
+  "operator": "fp8_gemm_dsr1",
+  "shape": {
+    "M": 4096,
+    "N": 7168,
+    "K": 2048
+  },
+  "environment": {
+    "torch_version": "2.12.0.dev20260326+rocm7.1",
+    "hip_version": "7.1.52802",
+    "device_name": "AMD Instinct MI355X",
+    "input_dtype": "float8_e4m3fn",
+    "output_dtype": "bfloat16",
+    "scale_scheme": "per-token-A + per-channel-B"
+  },
+  "benchmark_config": {
+    "warmup": 5,
+    "iters": 100
+  },
+  "rows": [
+    {
+      "M": 4096,
+      "N": 7168,
+      "K": 2048,
+      "latency_us": {
+        "aiter_a8w8": 93.75575929880142,
+        "aiter_a8w8_bpreshuffle": 72.41307059302926,
+        "hip_stock": 104819.17461846024,
+        "v1_mfma_tile": 430.2359581924975,
+        "v2_wider_tile": 243.65306133404374,
+        "v3_double_buffer": 252.34875036403537,
+        "v4_bigger_mfma": 242.5748505629599,
+        "v5_block_256x128": 280.0930803641677,
+        "v6_lds_swizzle": 136.11643109470606,
+        "v7_8wave": 101.61248035728931,
+        "v8_wider_n": 111.90796969458461,
+        "v9_256n_16w": 113.4565589018166
+      },
+      "tflops": {
+        "aiter_a8w8": 1282.6847671803498,
+        "aiter_a8w8_bpreshuffle": 1660.7372578338995,
+        "hip_stock": 1.1473004316790392,
+        "v1_mfma_tile": 279.5189058423455,
+        "v2_wider_tile": 493.5668923245215,
+        "v3_double_buffer": 476.5590640513007,
+        "v4_bigger_mfma": 495.76072708653254,
+        "v5_block_256x128": 429.35399950489006,
+        "v6_lds_swizzle": 883.5015972783406,
+        "v7_8wave": 1183.5070245814843,
+        "v8_wider_n": 1074.6248423254121,
+        "v9_256n_16w": 1059.957092406356
+      }
+    }
+  ]
+}
