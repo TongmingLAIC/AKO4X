@@ -1216,7 +1216,7 @@ def run_variance_check(
 # Source file extensions recognized inside a trajectory snapshot. Must stay in
 # sync with the copy list in `spawn.py::populate_child` (existing-mode sibling
 # copy) and whatever pack_solution_from_files considers a kernel source.
-_SNAPSHOT_SOURCE_EXTS = {".py", ".cu", ".cpp", ".h", ".hpp", ".cuh"}
+_SNAPSHOT_SOURCE_EXTS = {".py", ".cu", ".cpp", ".hip", ".h", ".hpp", ".cuh"}
 
 
 def _snapshot_has_sources(snapshot: Path) -> bool:

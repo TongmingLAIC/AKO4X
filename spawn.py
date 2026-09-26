@@ -351,15 +351,28 @@ def discover_expert_baseline(dataset_path, operator, op_type, explicit_path=""):
 
 
 def infer_language(kernel_path):
-    """Infer language from kernel file extension. Returns (language, entry_point)."""
+    """Infer language from kernel file extension. Returns (language, entry_point).
+
+    ``.hip`` is the AMD ROCm equivalent of ``.cu`` — same role (device kernels
+    compiled by hipcc). The convention for the host-side binding is a sibling
+    ``binding.cpp`` (pybind11), so a ROCm variant directory typically contains
+    ``kernel.hip + binding.cpp``. ``.hip`` is therefore placed BEFORE ``.cpp``
+    in the iteration order so dir inference picks ``hip`` (not ``cpp``) for
+    such directories. The actual ROCm build path is downstream of the
+    benchmark adapter (see ``scripts/benchmark_adapter_rocm.py`` and
+    ``docs/rocm-adapter-contract.md``); this function only classifies.
+    """
     ext_map = {
         ".cu": ("cuda", "binding.py::kernel"),
+        ".hip": ("hip", "binding.cpp::kernel"),  # ROCm device kernel; sibling binding.cpp
         ".cpp": ("cpp", "binding.py::kernel"),
         ".py": ("python", "kernel.py::run"),
     }
     kp = Path(kernel_path)
     if kp.is_dir():
-        # Check for .cu or .cpp files in directory
+        # Check for .cu / .hip / .cpp files in directory (iteration order matters:
+        # .hip is checked before .cpp so a kernel.hip + binding.cpp dir resolves
+        # to "hip", not "cpp").
         for ext, (lang, ep) in ext_map.items():
             if list(kp.glob(f"*{ext}")):
                 return lang, ep
@@ -464,7 +477,7 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
                 if not f.is_file():
                     continue
                 ext = f.suffix.lower()
-                if ext in (".py", ".cu", ".cpp", ".h", ".hpp", ".cuh", ".toml"):
+                if ext in (".py", ".cu", ".cpp", ".hip", ".h", ".hpp", ".cuh", ".toml"):
                     if f.name != "config.toml":
                         shutil.copy2(f, child_dir / "solution" / f.name)
         else:
@@ -481,7 +494,7 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
             for sibling in kp.parent.iterdir():
                 if sibling.is_file() and sibling != kp:
                     ext = sibling.suffix.lower()
-                    if ext in (".py", ".cu", ".cpp", ".h", ".hpp", ".cuh", ".toml"):
+                    if ext in (".py", ".cu", ".cpp", ".hip", ".h", ".hpp", ".cuh", ".toml"):
                         if sibling.name == "config.toml":
                             continue
                         if sibling.name == dest_name:
