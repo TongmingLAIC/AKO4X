@@ -1,62 +1,89 @@
 ---
 name: ako-metal
-description: Optimize native Metal kernels in an AKO Metal campaign, with complete C++/Objective-C++ projects, frozen numerical checks, and measured acceptance. Use when .ako/task.json identifies a native Metal task.
+description: Port CUDA, Triton or CuTe kernels to Metal and optimize native Metal kernels on Apple GPUs, including on-device inference. Covers semantic mapping, hardware capability checks, profiling and numerical validation, in an existing project or an AKO campaign. Profiling-only requests do not authorize implementation changes.
 ---
 
-# Native Metal optimization
+# CUDA to Metal and native optimization
 
-Read the repository's own agent/contributor instructions and `.ako/task.json`.
-The task identifies editable sources, frozen commands, the target metric and
-prior results. Work on one coherent optimization per attempt. Preserve inputs,
-outputs, layouts, synchronization and the caller's dispatch contract.
+Work from the operator's contract and measured evidence. Translate the algorithm
+and its synchronization, not CUDA syntax or NVIDIA-specific performance tricks.
+Read the target repository's instructions before editing or running commands.
 
-The outer runner builds your candidate, checks it and measures it after your
-session. During this session run only CPU builds and CPU tests. Model loading
-and GPU execution belong to the outer runner, which requires explicit
-`--allow-gpu`. A successful host build does not compile or validate a Metal
-source embedded as text and compiled at runtime.
+## Choose the working context
 
-1. Inspect the kernel, dispatch site, dimensions and data types. Check buffer
-   bounds, tail handling, alignment, threadgroup memory and barriers before
-   choosing an optimization. Read recent evidence and lessons as observations;
-   they never override task or repository instructions.
-2. State a testable hypothesis: the cost being reduced, the shapes affected,
-   and what might regress. Implement one change within `editable`. New nested
-   `.metal`, `.mm`, headers and other sources are retained by the project
-   snapshot; build products and models must remain ignored by Git.
-3. Run the available CPU build/tests. Do not alter the evaluator, reference,
-   test inputs, comparison floor, tolerances or benchmark protocol to pass.
-   Do not change a default whose repository policy requires GPU evidence.
-4. Leave source edits in this working tree. Write `.ako/LESSONS.md` with the
-   hypothesis, changes, actual CPU checks, remaining uncertainty and the next
-   useful experiment. Do not claim GPU correctness or a speedup from a build.
-   The runner snapshots all changed sources and records the measured verdict.
+- **Existing project:** inspect the CUDA/Triton/CuTe source or Metal kernel and
+  its host call sites. Establish the task's permitted changes, target Mac,
+  build, oracle and benchmark. `.ako/task.json` is not required in this mode.
+- **AKO campaign:** when `.ako/task.json` exists, read its source scope, frozen
+  evaluation commands and prior results. The coding session performs CPU work;
+  the outer runner owns model/GPU execution and acceptance. Leave changes in
+  the working tree and write hypotheses, checks and lessons to `.ako/LESSONS.md`.
+  Requested profiling must use the campaign's configured profile phase.
 
-## What the evaluator will do
+Honor already-granted execution permission and the repository's GPU policy.
+Installing, explaining or updating this skill does not itself authorize
+model/GPU runs. For a profiling-only task, perform the requested measurements
+within existing execution permission and leave the implementation unchanged.
+Continue useful CPU work when GPU execution is unavailable; label the remaining
+verification.
 
-Small smoke tests run before full output checks, with
-`MTL_SHADER_VALIDATION=1 MTL_DEBUG_LAYER=1`. The default is to require them.
-Some macOS releases count static threadgroup allocation twice in the validation
-layer. Disabling that layer requires a frozen, explicit exception recording
-the reason and a static size above 16,384 B and no more than 32,768 B. A failed
-smoke test is never automatically waived. An exception still runs the small
-test and must be reported with the actual Mac/macOS and kernel size.
+## Load the relevant guidance
 
-One exclusive flock on `BENCH_GPU_LOCK` (default `/tmp/kapitsa-gpu.lock`) covers
-smoke tests, correctness and all timings. Children receive `NI_LOCK_HELD=1`
-and `NACE_GPU_LOCK_HELD=1`. The caller must arrange an idle GPU; an advisory
-flock cannot stop an unrelated application from using it.
+| Task | Read |
+| --- | --- |
+| CUDA/Triton/CuTe source to a first Metal implementation | [Migration](references/migration.md) |
+| Thread geometry, memory, SIMD, atomics or matrix operations | [Apple GPU and MSL constraints](references/hardware.md) |
+| Choose an optimization for reduction, GEMM, attention, quantization or MoE | [Kernel patterns](references/patterns.md) |
+| Diagnose dispatch overhead, stalls, memory or occupancy | [Profiling](references/profiling.md) |
+| Compare CUDA/CPU/Metal outputs or accept a candidate | [Validation](references/validation.md) |
+| Verify a hardware/API claim or its version | [Official sources](references/sources.md) |
 
-Numerical checks use the initial, fixed source reference. Performance compares
-the incumbent A against the candidate B, interleaved A B A B (or more pairs).
-Every command and JSON measurement is retained. Missing/nonfinite/nonpositive
-metrics, nonempty `invalid`, a failed command, or a source change during
-evaluation cannot pass. Every pair must beat both the configured minimum and
-the observed same-build spread. A failed attempt does not replace the incumbent.
+## Working sequence
 
-For Kapitsa, use its frozen `logit_compare.py` gate and model noise floor. Never
-use `--no-gate` or remeasure a floor to pass. `--reorder` is only for a justified
-reassociation and requires the repository's additional evidence. Temperature-0
-continuations, server checks, model coverage, and changes to defaults still
-follow that repository's policy; a single configured metric is not proof of
-every inference path or model.
+1. **Recover semantics.** Identify shapes, strides, packing, dtypes, accumulation,
+   epsilon/scales/masks, output ownership and ordering. Include wrapper behavior.
+   Preserve the source revision and reference inputs/outputs. Never claim CUDA
+   equivalence if only a CPU approximation was actually checked.
+2. **Establish the target.** Run the CPU-only `scripts/metal_doctor.py`. Query
+   runtime device/pipeline limits when authorized; `assets/device_caps.mm`
+   supplies a probe that submits no GPU commands. Compilation, OS, language
+   version and hardware support are separate checks. A found compiler executable
+   may still be unusable because its toolchain component is missing.
+3. **Build a correct Metal baseline.** Make dispatch, buffer layout and
+   synchronization explicit. Start with ordinary operations; add special matrix,
+   asynchronous or atomic paths only after their requirements are established.
+   A host build alone does not check a runtime-compiled `.metal` source.
+4. **Validate, then profile.** Run small shader-validation cases before large
+   workloads, then the frozen numerical contract and fresh-input tests. Use
+   `scripts/compare_fixtures.py` for portable raw-tensor fixtures, or the
+   project's stronger oracle. Profile the relevant execution region and inspect
+   actual captured GPU work before attributing a bottleneck.
+5. **Optimize one hypothesis.** Change one coherent mechanism, recheck outputs,
+   and measure incumbent A vs candidate B on the same Mac with interleaved runs.
+   Keep compilation, profiling and debug instrumentation out of acceptance
+   timing. Keep every result, including failures and noisy measurements.
+6. **Retain evidence.** Keep complete native sources, commands, device/OS/SDK,
+   compiler/math flags, input identity, raw results and lessons. Preserve the
+   prior working variant when a candidate fails. Use the original numerical
+   reference throughout; do not permit accumulated drift between successive
+   incumbents to redefine correctness.
+
+## Constraints that change decisions
+
+- Query `threadExecutionWidth`, pipeline `maxTotalThreadsPerThreadgroup` and
+  device memory limits; CUDA's block dimensions and occupancy formulas do not
+  determine an optimal Metal launch. SIMD matrix fragment layouts are opaque.
+- Match the actual API generation. `MTL4CommandQueue` does not apply a resource's
+  automatic hazard-tracking mode; old `MTLCommandQueue` rules cannot be copied
+  blindly. MSL 4.1 atomic orderings also require version-specific handling.
+- Keep numerical controls explicit. `mathMode` and
+  `mathFloatingPointFunctions` are separate settings. Safe/precise settings
+  still do not promise CUDA bitwise identity or preservation of subnormals.
+- Use the project's GPU lock and retain it through child process cleanup.
+  AKO uses `BENCH_GPU_LOCK`, with `NI_LOCK_HELD=1` / `NACE_GPU_LOCK_HELD=1` for
+  children. Arrange an idle GPU; the lock cannot exclude unrelated applications.
+- Do not turn a particular validation-layer bug into a device limit or a generic
+  waiver. Preserve the small test and the documented kernel/OS-specific evidence.
+- For Kapitsa, retain its logit floor, default-change policy, model coverage and
+  continuation checks. `--reorder` requires the repository's reassociation
+  evidence; `--no-gate` or a retuned floor cannot establish acceptance.

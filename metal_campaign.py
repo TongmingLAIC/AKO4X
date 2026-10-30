@@ -85,6 +85,11 @@ def fingerprint(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def runtime_fingerprints(runtime: Path) -> dict:
+    return {str(path.relative_to(runtime)): fingerprint(path) for path in sorted(runtime.rglob("*"))
+            if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"}
+
+
 def initialize(repo: Path, revision: str, config: Path, output: Path, agent: dict) -> Path:
     spec = load_spec(config)
     agent = validate_agent(agent)
@@ -103,10 +108,11 @@ def initialize(repo: Path, revision: str, config: Path, output: Path, agent: dic
     skills = HERE / "templates/skills/metal"
     if not skills.is_dir():
         skills = HERE / "skills/metal"
-    shutil.copytree(skills, runtime / "skills/metal")
+    shutil.copytree(skills, runtime / "skills/metal", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     write_json(output / "evaluation.json", spec)
     write_json(output / "state.json", {"baseline_commit": commit, "best_commit": commit,
-               "best": "baseline", "agent": agent, "evaluation_sha256": fingerprint(output / "evaluation.json")})
+               "best": "baseline", "agent": agent, "evaluation_sha256": fingerprint(output / "evaluation.json"),
+               "runtime_sha256": runtime_fingerprints(runtime)})
     (output / "rounds").mkdir()
     return output
 
@@ -115,6 +121,8 @@ def read_campaign(root: Path) -> tuple[dict, dict]:
     state = json.loads((root / "state.json").read_text())
     if fingerprint(root / "evaluation.json") != state["evaluation_sha256"]:
         raise ValueError("evaluation.json changed; start a new campaign to change gates, inputs or commands")
+    if "runtime_sha256" in state and runtime_fingerprints(root / "runtime") != state["runtime_sha256"]:
+        raise ValueError("copied runtime/skill changed; start a new campaign to change the evaluator")
     spec = load_spec(root / "evaluation.json")
     for path, commit in ((root / "baseline", state["baseline_commit"]), (root / state["best"], state["best_commit"])):
         assert_snapshot(path, commit)
@@ -140,7 +148,7 @@ def install_task(root: Path, candidate: Path, spec: dict, agent: dict, prompt: s
     if skill.exists() or (candidate / ".ako").exists():
         raise ValueError("candidate already contains reserved .ako or ako-metal skill paths")
     skill.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(root / "runtime/skills/metal", skill)
+    shutil.copytree(root / "runtime/skills/metal", skill, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (candidate / ".ako").mkdir()
     with (candidate / ".git/info/exclude").open("a") as handle:
         handle.write(f"\n/.ako/\n/{directory}/skills/ako-metal/\n")
@@ -225,9 +233,12 @@ def run_round(root: Path, *, candidate_source: Path | None, prompt: str, label: 
         if not report["changed_files"]:
             report.update(status="rejected", reason="no_source_change")
         else:
+            # Recheck after the coding session, before any evaluator/GPU command.
+            read_campaign(root)
             assert_snapshot(candidate, report["candidate_commit"])
             evaluate(spec, baseline=root / "baseline", reference=root / state["best"], candidate=candidate,
-                     evidence=evidence, gpu_lock=gpu_lock, allow_gpu=allow_gpu, report=report)
+                     evidence=evidence, skill_dir=root / "runtime/skills/metal", gpu_lock=gpu_lock,
+                     allow_gpu=allow_gpu, report=report)
             # A successful command cannot authorize promoting sources it changed
             # after compilation or a modified numerical reference/configuration.
             read_campaign(root)
@@ -255,6 +266,7 @@ def cpu_build(root: Path, candidate: Path) -> Path:
     directory.mkdir(parents=True)
     build = directory / "build"
     context = {**spec["variables"], "python": sys.executable, "repo": candidate, "build": build,
+               "skill_dir": root / "runtime/skills/metal",
                "baseline": candidate, "reference": candidate, "candidate": candidate,
                "baseline_build": build, "reference_build": build, "candidate_build": build,
                "evidence": directory}

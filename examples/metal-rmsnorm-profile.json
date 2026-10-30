@@ -1,0 +1,25 @@
+{
+  "name": "Native Metal RMSNorm with a separate GPU-capture phase",
+  "editable": ["examples/metal-rmsnorm/rmsnorm.metal"],
+  "build": [
+    ["cmake", "-S", "{repo}/examples/metal-rmsnorm", "-B", "{build}", "-DCMAKE_BUILD_TYPE=Release"],
+    ["cmake", "--build", "{build}", "--parallel", "4"]
+  ],
+  "smoke": [
+    ["{build}/rmsnorm_bench", "--check", "--rows", "4", "--columns", "128", "--seed", "17"],
+    ["{build}/rmsnorm_bench", "--check", "--rows", "7", "--columns", "137", "--seed", "413"]
+  ],
+  "correctness": [
+    ["{candidate_build}/rmsnorm_bench", "--check", "--rows", "257", "--columns", "768", "--seed", "73"],
+    ["{candidate_build}/rmsnorm_bench", "--check", "--rows", "513", "--columns", "1024", "--seed", "991"]
+  ],
+  "benchmark": {
+    "command": ["{build}/rmsnorm_bench", "--bench", "--rows", "4096", "--columns", "1024", "--seed", "42", "--output", "{output}"],
+    "metric": "latency_ms", "direction": "lower", "pairs": 2,
+    "min_speedup": 1.02, "max_relative_spread": 0.05
+  },
+  "profile": [
+    ["{candidate_build}/rmsnorm_bench", "--check", "--rows", "4096", "--columns", "1024", "--seed", "42", "--capture", "{evidence}/candidate.gputrace"]
+  ],
+  "timeout_seconds": 300
+}

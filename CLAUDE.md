@@ -17,6 +17,13 @@ the shared `agent_runtime.py`, and does not import the FlashInfer adapter.
 Do not route native projects through the legacy `kernel.py` archive helpers.
 `templates/skills/metal/` is the canonical native task skill. Keep configured
 commands CPU-only in `build`; all GPU execution requires `--allow-gpu`.
+The skill also supports direct CUDA/Triton/CuTe migration outside a campaign;
+keep its references, portable checker and capability assets self-contained.
+New campaigns fingerprint the copied runtime/skill. Optional `profile` commands
+run after ordinary timing under the same GPU lock; their output is diagnostic,
+not an acceptance metric. Preserve both independent Metal math controls when
+using the conservative baseline; `mathMode` alone does not select precise math
+functions.
 
 ## Architecture
 

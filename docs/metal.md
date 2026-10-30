@@ -8,6 +8,37 @@ continues to target FlashInfer; do not send a Metal project through its
 `solution/kernel.py` archive. The native runner has its own fixed command
 contract and evidence archive, with no CUDA, PyTorch or MLX dependency.
 
+## Use the skill for a CUDA-to-Metal port
+
+The [ako-metal skill](../templates/skills/metal/SKILL.md) also works directly in
+an existing project; `.ako/task.json` is only required for campaign context.
+Install/copy its **whole directory**, including references, scripts and assets,
+as `ako-metal` in the agent's skills directory. Its focused guides cover
+[CUDA/Triton/CuTe semantics](../templates/skills/metal/references/migration.md),
+[Apple GPU/MSL constraints](../templates/skills/metal/references/hardware.md),
+[operator patterns](../templates/skills/metal/references/patterns.md),
+[profiling](../templates/skills/metal/references/profiling.md) and
+[numerical acceptance](../templates/skills/metal/references/validation.md).
+[Official sources](../templates/skills/metal/references/sources.md) identify the
+document versions and separate specifications from local observations.
+
+For a CUDA-only repository, first preserve the source implementation's exact
+inputs and reference outputs, then implement and validate a buildable native
+Metal baseline. Commit that baseline before initializing a native campaign:
+the runner builds both comparison versions as Metal projects, and does not
+automatically execute CUDA or translate PTX. Keep source/CPU reference fixtures
+in the frozen correctness checks throughout later optimization. A CPU oracle
+must be identified as CPU evidence, not an executed CUDA comparison.
+
+The bundled `scripts/compare_fixtures.py` checks portable tensor manifests,
+input identity, shape/dtype, payload size/hash and approved numerical tolerances.
+It handles integer/bool outputs exactly and distinguishes numeric from bitwise
+equality. `scripts/metal_doctor.py` checks host tooling without accessing a GPU;
+it can compile the capability probe without executing it. The probe can later
+query actual device/pipeline limits under the target project's execution policy.
+A found `metal` executable is not sufficient: the doctor also checks whether
+its toolchain component can actually start.
+
 ## Start with the included operator
 
 Requirements: Python 3.10+, Git, CMake 3.24+, Xcode Command Line Tools (SDK 15+)
@@ -58,6 +89,12 @@ It never pushes, opens PRs, changes project defaults, or merges anything.
 Start from [examples/metal-rmsnorm.json](../examples/metal-rmsnorm.json). One
 campaign has one frozen `evaluation.json`; changing it requires a new campaign.
 Use a separate campaign for each operator/model/measurement contract.
+New campaigns also fingerprint their copied runtime and skill, including
+reference/checker helpers. Edits are rejected before a round, after coding and
+after evaluation. Existing campaigns without runtime hashes remain readable;
+initialize a new campaign to adopt this protection and the updated skill.
+These hashes detect changes relative to local campaign state, not a security
+boundary against someone able to rewrite that state and evaluator together.
 
 | Field | Contract |
 | --- | --- |
@@ -65,6 +102,7 @@ Use a separate campaign for each operator/model/measurement contract.
 | `build` | Nonempty list of CPU-only build commands, each an argv array; use out-of-source builds. |
 | `smoke` | Small tests of the changed kernel, run on incumbent and candidate with the Metal validation layer. |
 | `correctness` | Nonempty list of real output-check commands. Every exit code must be zero. |
+| `profile` | Optional list of diagnostic argv commands, run on the candidate after A/B timing under the same GPU lock. Default: empty. |
 | `benchmark.command` | Writes a new JSON file to `{output}` on each invocation. |
 | `benchmark.metric` | Positive finite numeric field, e.g. `latency_ms` or `results.decode.median_tps`. |
 | `benchmark.direction` | `lower` for latency, `higher` for throughput. |
@@ -82,13 +120,16 @@ Correctness depends on the configured oracle's coverage and exit-code contract.
 Command placeholders are `{repo}`/`{build}` for the current leg,
 `{baseline}`/`{baseline_build}` for the initial fixed numerical reference,
 `{reference}`/`{reference_build}` for the current incumbent,
-`{candidate}`/`{candidate_build}`, `{evidence}`, `{output}`, `{python}`, and
+`{candidate}`/`{candidate_build}`, `{evidence}`, `{python}`, `{skill_dir}`, and
 keys in `variables`. No shell expansion is performed. `env` supplies explicit
 environment overrides. Paths containing spaces stay single argv entries.
+`{output}` is provided only to `benchmark.command`; profile commands should
+use distinct files under `{evidence}`. `{skill_dir}` resolves to the campaign's
+frozen `runtime/skills/metal`, including `scripts/compare_fixtures.py`.
 
 The runner builds all required versions, then takes a single exclusive flock
 on `BENCH_GPU_LOCK` (default `/tmp/kapitsa-gpu.lock`) for smoke tests, output
-checks and the complete timing sequence. Children get `NI_LOCK_HELD=1` and
+checks, the complete timing sequence and optional profiling. Children get `NI_LOCK_HELD=1` and
 `NACE_GPU_LOCK_HELD=1` to avoid taking the same lock again. The lock coordinates
 cooperating programs; arrange an idle GPU before using `--allow-gpu`. A timeout
 or interrupt kills the command's process group before releasing the lock.
@@ -100,6 +141,28 @@ double-counting limitation, a frozen `shader_validation` object can set
 32,768, plus a nonempty `reason`. It still runs the smoke test and records the
 exception. Verify this applies to the actual kernel/OS; never use it to waive
 an unexplained failure.
+
+## Optional profiling
+
+[examples/metal-rmsnorm-profile.json](../examples/metal-rmsnorm-profile.json)
+adds a separate diagnostic phase using the host's `--capture NEW.gputrace`.
+It captures one representative check dispatch after the uninstrumented A/B
+timings. Initialize a new campaign with this config when capture is wanted.
+The ordinary example keeps profiling disabled.
+
+The runner strips inherited `MTL_CAPTURE_ENABLED` from coding, CPU builds and
+measurement commands, and sets it only for the profile phase. The RMSNorm host
+checks destination support and capture errors, rejects an existing capture
+path, and marks captured timing invalid for benchmark acceptance. Profile
+output never supplies the acceptance metric; a failed profile command still
+fails the attempt and leaves the incumbent unchanged.
+
+Inspect the actual GPU work in Xcode before diagnosing a bottleneck. The result
+records completed profile commands and `gpu_activity_inspected: false`; command
+success alone does not establish useful trace contents. Instruments commands,
+sampling support and target/process lifetime require the checks in the
+[profiling guide](../templates/skills/metal/references/profiling.md). In
+particular, do not assume a tracing time limit terminates its target and helpers.
 
 ## Kapitsa integration
 
@@ -140,7 +203,7 @@ outside the repository are currently unsupported. Local
 build directories and large logit dumps are retained and can consume disk.
 
 `history.jsonl` is append-only. `state.json` changes its best pointer only after
-all checks pass and source snapshots/configuration are still unchanged. A new
+all checks pass and source snapshots/configuration/runtime are still unchanged. A new
 attempt reads previous results/lessons and starts from this best pointer.
 Attempts are bounded by `--rounds` and per-agent/per-command timeouts. The
 native workflow implements fixed-evaluator iteration; it does not implement
@@ -153,7 +216,7 @@ best pointer. Invalid invocation/configuration exits 2; interruption exits 130.
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m compileall -q agent_runtime.py metal_campaign.py metal_runtime.py tests
+python3 -m compileall -q agent_runtime.py metal_campaign.py metal_runtime.py tests templates/skills/metal/scripts
 cmake -S examples/metal-rmsnorm -B /tmp/ako-metal-build -DCMAKE_BUILD_TYPE=Release
 cmake --build /tmp/ako-metal-build --parallel 4
 ```
@@ -161,6 +224,9 @@ cmake --build /tmp/ako-metal-build --parallel 4
 Tests use fake agent/benchmark processes and temporary lock files, including
 real subprocess launch, best-variant inheritance, complete native source
 archival, gate failures, missing session events, timeout cleanup and interrupts.
+They also check frozen runtime integrity, profile ordering/environment/locking,
+portable fixture validation and a missing-toolchain diagnostic using fake tools.
 They do not load a model or submit GPU work. Host compilation does not verify
-the Metal kernel. Real Codex optimization sessions and GPU runs remain to be
-validated on the intended Mac; report that limitation when reviewing the port.
+the Metal kernel. Real Codex optimization sessions, CUDA/Metal parity, GPU
+capture and performance remain to be validated on the intended hardware;
+report those limits when reviewing the port.

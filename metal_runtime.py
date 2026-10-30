@@ -15,9 +15,9 @@ import time
 from pathlib import Path
 
 TOKENS = {"repo", "build", "baseline", "reference", "candidate", "baseline_build",
-          "reference_build", "candidate_build", "evidence", "output", "python"}
+          "reference_build", "candidate_build", "evidence", "output", "python", "skill_dir"}
 GPU_ENV = {"BENCH_GPU_LOCK", "NI_LOCK_HELD", "NACE_GPU_LOCK_HELD",
-           "MTL_SHADER_VALIDATION", "MTL_DEBUG_LAYER"}
+           "MTL_SHADER_VALIDATION", "MTL_DEBUG_LAYER", "MTL_CAPTURE_ENABLED"}
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -29,7 +29,7 @@ def write_json(path: Path, value: dict) -> None:
 def load_spec(path: Path) -> dict:
     spec = json.loads(path.read_text())
     required = {"name", "editable", "build", "smoke", "correctness", "benchmark"}
-    optional = {"variables", "env", "timeout_seconds", "shader_validation"}
+    optional = {"variables", "env", "timeout_seconds", "shader_validation", "profile"}
     if not isinstance(spec, dict) or not required <= spec.keys() or spec.keys() - required - optional:
         raise ValueError(f"config requires {sorted(required)}; optional keys: {sorted(optional)}")
     if not isinstance(spec["name"], str) or not spec["name"].strip():
@@ -76,15 +76,22 @@ def load_spec(path: Path) -> dict:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low < value <= high:
             raise ValueError(f"benchmark.{key} must be in ({low}, {high}]")
     commands = []
+    profile = spec.setdefault("profile", [])
+    if not isinstance(profile, list):
+        raise ValueError("profile must be a list of commands")
+    commands.extend(profile)
     for phase in ("build", "smoke", "correctness"):
         if not isinstance(spec[phase], list) or not spec[phase]:
             raise ValueError(f"{phase} requires at least one command")
         commands.extend(spec[phase])
+    non_benchmark_count = len(commands)
     commands.append(bench["command"])
-    for command in commands:
+    for index, command in enumerate(commands):
         if not isinstance(command, list) or not command or any(not isinstance(x, str) or not x for x in command):
             raise ValueError("commands must be non-empty argv arrays; shell text is not accepted")
         for argument in command:
+            if index < non_benchmark_count and "{output}" in argument:
+                raise ValueError("{output} is only provided to benchmark.command; use {evidence} for other phases")
             unknown = set(re.findall(r"\{(\w+)\}", argument)) - TOKENS - spec["variables"].keys()
             if unknown:
                 raise ValueError(f"unknown command placeholders: {sorted(unknown)}")
@@ -163,13 +170,14 @@ def read_metric(path: Path, field: str) -> float:
 
 
 def evaluate(spec: dict, *, baseline: Path, reference: Path, candidate: Path,
-             evidence: Path, gpu_lock: Path, allow_gpu: bool, report: dict) -> None:
+             evidence: Path, skill_dir: Path, gpu_lock: Path, allow_gpu: bool, report: dict) -> None:
     if not allow_gpu:
         raise ValueError("GPU execution requires --allow-gpu; init and build are CPU-only")
     import sys
 
     builds = evidence.parent / "build"
     context = {**spec["variables"], "python": sys.executable, "evidence": evidence,
+               "skill_dir": skill_dir,
                "baseline": baseline, "reference": reference, "candidate": candidate,
                "baseline_build": builds / "baseline", "reference_build": builds / "reference",
                "candidate_build": builds / "candidate"}
@@ -209,6 +217,14 @@ def evaluate(spec: dict, *, baseline: Path, reference: Path, candidate: Path,
                 run_command(expand(bench["command"], ctx), cwd=context[role], env=env,
                             evidence=evidence, name=label, timeout=spec["timeout_seconds"])
                 measurements.append({"label": label, "role": role, "value": read_metric(output, bench["metric"])})
+        # Capture only after ordinary timings, in a separate child environment.
+        # Profile output is diagnostic and never a benchmark metric.
+        if spec["profile"]:
+            commands("profile", {**context, "repo": candidate, "build": context["candidate_build"]},
+                     {**env, "MTL_CAPTURE_ENABLED": "1"}, "profile")
+            report["profiling"] = {"commands_completed": len(spec["profile"]),
+                                   "included_in_acceptance_timing": False,
+                                   "gpu_activity_inspected": False}
     a = [m["value"] for m in measurements if m["role"] == "reference"]
     b = [m["value"] for m in measurements if m["role"] == "candidate"]
     ratios = [x / y if bench["direction"] == "lower" else y / x for x, y in zip(a, b)]

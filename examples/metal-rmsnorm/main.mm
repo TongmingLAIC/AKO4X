@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -15,20 +16,22 @@
 // A build only checks Objective-C++; Metal compilation happens at runtime.
 int main(int argc, char** argv) {
     @autoreleasepool {
+        MTLCaptureManager* capture_manager = nil;
         try {
             uint32_t rows = 4, columns = 128, seed = 17;
             bool bench = false;
-            std::string output;
+            std::string output, capture;
             for (int i = 1; i < argc; ++i) {
                 const std::string arg = argv[i];
                 if (arg == "--help") {
-                    std::cout << "rmsnorm_bench --check|--bench [--rows N] [--columns N] [--seed N] [--output FILE]\n";
+                    std::cout << "rmsnorm_bench --check|--bench [--rows N] [--columns N] [--seed N] [--output FILE] [--capture NEW.gputrace]\n";
                     return 0;
                 }
                 if (arg == "--bench") { bench = true; continue; }
                 if (arg == "--check") continue;
                 if (++i >= argc) throw std::runtime_error("missing argument value");
                 if (arg == "--output") { output = argv[i]; continue; }
+                if (arg == "--capture") { capture = argv[i]; continue; }
                 const auto value = std::stoul(argv[i]);
                 if (value > UINT32_MAX) throw std::runtime_error("argument too large");
                 if (arg == "--rows") rows = uint32_t(value);
@@ -39,6 +42,9 @@ int main(int argc, char** argv) {
             const size_t count = size_t(rows) * columns;
             if (!rows || !columns || count > 16 * 1024 * 1024)
                 throw std::runtime_error("shape must contain 1..16777216 elements");
+            if (!capture.empty() && (std::filesystem::exists(capture) ||
+                                    std::filesystem::path(capture).extension() != ".gputrace"))
+                throw std::runtime_error("capture must name a new .gputrace path");
             id<MTLDevice> device = MTLCreateSystemDefaultDevice();
             if (!device) throw std::runtime_error("no Metal device");
             NSError* error = nil;
@@ -47,6 +53,7 @@ int main(int argc, char** argv) {
             if (!source) throw std::runtime_error([[error description] UTF8String]);
             MTLCompileOptions* options = [MTLCompileOptions new];
             options.mathMode = MTLMathModeSafe;
+            options.mathFloatingPointFunctions = MTLMathFloatingPointFunctionsPrecise;
             id<MTLLibrary> library = [device newLibraryWithSource:source options:options error:&error];
             if (!library) throw std::runtime_error([[error description] UTF8String]);
             id<MTLFunction> function = [library newFunctionWithName:@"rmsnorm"];
@@ -59,6 +66,17 @@ int main(int argc, char** argv) {
             constexpr size_t guard = 16;
             id<MTLBuffer> y = [device newBufferWithLength:(count + 2 * guard) * sizeof(float) options:MTLResourceStorageModeShared];
             if (!queue || !x || !w || !y) throw std::runtime_error("Metal allocation failed");
+            if (!capture.empty()) {
+                capture_manager = [MTLCaptureManager sharedCaptureManager];
+                if (![capture_manager supportsDestination:MTLCaptureDestinationGPUTraceDocument])
+                    throw std::runtime_error("GPU trace capture unavailable; check tooling and MTL_CAPTURE_ENABLED");
+                MTLCaptureDescriptor* descriptor = [MTLCaptureDescriptor new];
+                descriptor.captureObject = queue;
+                descriptor.destination = MTLCaptureDestinationGPUTraceDocument;
+                descriptor.outputURL = [NSURL fileURLWithPath:@(capture.c_str())];
+                if (![capture_manager startCaptureWithDescriptor:descriptor error:&error])
+                    throw std::runtime_error([[error description] UTF8String]);
+            }
             auto* input = static_cast<float*>([x contents]);
             auto* weight = static_cast<float*>([w contents]);
             auto* result = static_cast<float*>([y contents]);
@@ -117,7 +135,9 @@ int main(int argc, char** argv) {
             for (size_t i = 0; i < guard; ++i)
                 if (result[i] != 123456.0f || result[guard + count + i] != 123456.0f)
                     throw std::runtime_error("output guard overwritten");
-            NSDictionary* report = @{@"invalid": @[], @"latency_ms": @(latency), @"max_abs_error": @(max_error),
+            if (capture_manager) [capture_manager stopCapture];
+            NSDictionary* report = @{@"invalid": capture.empty() ? @[] : @[@"profile capture enabled"],
+                                     @"latency_ms": @(latency), @"max_abs_error": @(max_error),
                                      @"rows": @(rows), @"columns": @(columns), @"seed": @(seed),
                                      @"device": device.name, @"correct": @YES};
             NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:&error];
@@ -131,6 +151,7 @@ int main(int argc, char** argv) {
             std::cout << text << '\n';
             return 0;
         } catch (const std::exception& error) {
+            if (capture_manager && capture_manager.isCapturing) [capture_manager stopCapture];
             std::cerr << error.what() << '\n';
             return 1;
         }

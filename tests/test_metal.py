@@ -19,11 +19,12 @@ from pathlib import Path
 phase = sys.argv[1]
 repo = Path(sys.argv[2])
 data = json.loads((repo / "src/kernel.metal").read_text())
-if phase == "build":
-    assert "NI_LOCK_HELD" not in os.environ
-elif phase == "smoke":
-    assert os.environ["MTL_SHADER_VALIDATION"] == os.environ.get("FAKE_EXPECT_LAYER", "1")
-    assert os.environ["MTL_DEBUG_LAYER"] == os.environ.get("FAKE_EXPECT_LAYER", "1")
+if os.environ.get("FAKE_PHASE_LOG"):
+    with open(os.environ["FAKE_PHASE_LOG"], "a") as log:
+        log.write(phase + (":" + Path(sys.argv[3]).stem if phase == "bench" else "") + "\\n")
+if phase != "profile":
+    assert "MTL_CAPTURE_ENABLED" not in os.environ
+if phase != "build":
     assert os.environ["NI_LOCK_HELD"] == os.environ["NACE_GPU_LOCK_HELD"] == "1"
     with open(os.environ["BENCH_GPU_LOCK"], "a") as lock:
         try:
@@ -32,6 +33,11 @@ elif phase == "smoke":
             pass
         else:
             raise RuntimeError("outer runner does not hold GPU lock")
+if phase == "build":
+    assert "NI_LOCK_HELD" not in os.environ
+elif phase == "smoke":
+    assert os.environ["MTL_SHADER_VALIDATION"] == os.environ.get("FAKE_EXPECT_LAYER", "1")
+    assert os.environ["MTL_DEBUG_LAYER"] == os.environ.get("FAKE_EXPECT_LAYER", "1")
 elif phase == "correctness":
     assert os.environ["MTL_SHADER_VALIDATION"] == "0"
     print("frozen baseline:", (Path(sys.argv[3]) / "src/kernel.metal").read_text())
@@ -44,6 +50,17 @@ elif phase == "bench":
     output.write_text(json.dumps({"latency_ms": value, "invalid": data.get("invalid", [])}))
     if data.get("mutate") and output.stem == "B2":
         (repo / "src/kernel.metal").write_text("changed during benchmark")
+elif phase == "profile":
+    assert os.environ["MTL_SHADER_VALIDATION"] == "0"
+    assert os.environ["MTL_DEBUG_LAYER"] == "0"
+    assert os.environ["MTL_CAPTURE_ENABLED"] == "1"
+    helper = Path(sys.argv[4]) / "scripts/compare_fixtures.py"
+    assert helper.is_file()
+    if data.get("profile_mutate"):
+        helper.write_text("changed during profiling")
+    if data.get("profile_failure"):
+        raise RuntimeError("fake capture failed")
+    (Path(sys.argv[3]) / "profile.json").write_text(json.dumps({"latency_ms": 0.001, "invalid": ["profiling"]}))
 '''
 
 
@@ -156,6 +173,82 @@ class NativeCampaignTest(unittest.TestCase):
         self.assertFalse(result["accepted"])
         self.assertEqual(self.state()["best"], "baseline")
 
+    def profile_campaign(self):
+        self.spec["profile"] = [["{python}", "{repo}/driver.py", "profile", "{repo}", "{evidence}", "{skill_dir}"]]
+        self.spec["build"].append(["{python}", "{skill_dir}/scripts/compare_fixtures.py", "--help"])
+        self.events = self.root / "phases.log"
+        self.spec["env"] = {"FAKE_PHASE_LOG": str(self.events)}
+        write_json(self.config, self.spec)
+        self.output = self.root / "profile-campaign"
+        campaign.initialize(self.repo, "HEAD", self.config, self.output, {"name": "codex"})
+        self.workspace = self.output / "workspace"
+
+    def test_profile_runs_after_abab_under_lock_with_separate_capture_env(self):
+        self.profile_campaign()
+        self.change()
+        with patch.dict(os.environ, {"MTL_CAPTURE_ENABLED": "1"}):
+            # The inherited capture flag must also be stripped from CPU builds.
+            campaign.cpu_build(self.output, self.workspace)
+            result = self.run_round("profile")
+        self.assertTrue(result["accepted"], result)
+        self.assertEqual(self.events.read_text().splitlines()[-5:], ["bench:A1", "bench:B1", "bench:A2", "bench:B2", "profile"])
+        self.assertEqual([item["value"] for item in result["measurements"]], [10, 5, 10, 5])
+        self.assertEqual(result["pair_speedups"], [2.0, 2.0])
+        self.assertEqual(result["profiling"], {"commands_completed": 1,
+                         "included_in_acceptance_timing": False, "gpu_activity_inspected": False})
+
+    def test_failed_profile_prevents_promotion_and_preserves_timings(self):
+        self.profile_campaign()
+        self.change(profile_failure=True)
+        result = self.run_round("failed-profile")
+        self.assertEqual(result["status"], "error", result)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(len(result["measurements"]), 4)
+        self.assertEqual(self.state()["best"], "baseline")
+        self.assertIn("fake capture failed", (self.output / "rounds/failed-profile/evidence/profile-0.stderr").read_text())
+        with exclusive_lock(self.gpu_lock, timeout=0):
+            pass
+
+    def test_profile_cannot_change_frozen_helper_and_promote_candidate(self):
+        self.profile_campaign()
+        self.change(profile_mutate=True)
+        result = self.run_round("changed-helper")
+        self.assertFalse(result["accepted"], result)
+        self.assertIn("copied runtime/skill changed", result["reason"])
+        self.assertEqual(self.state()["best"], "baseline")
+
+    def test_runtime_mutation_is_rejected_before_agent_or_gpu(self):
+        helper = self.output / "runtime/skills/metal/scripts/compare_fixtures.py"
+        helper.write_text("raise SystemExit(0)\n")
+        with patch.object(campaign, "run_command") as command, patch.object(campaign, "evaluate") as evaluate:
+            with self.assertRaisesRegex(ValueError, "copied runtime/skill changed"):
+                self.run_round("modified-runtime", agent=True)
+            command.assert_not_called()
+            evaluate.assert_not_called()
+        self.assertEqual(list((self.output / "rounds").iterdir()), [])
+
+    def test_runtime_mutation_during_coding_is_rejected_before_evaluation(self):
+        def fake_agent(command, *, cwd, env, evidence, name, timeout, check):
+            (cwd / "src/kernel.metal").write_text(json.dumps({"latency": 5.0}))
+            (evidence / "agent.stdout").write_text(
+                '{"type":"thread.started","thread_id":"tampering-test"}\n{"type":"turn.completed"}\n')
+            (self.output / "runtime/skills/metal/scripts/compare_fixtures.py").write_text("modified by agent")
+            return {"returncode": 0, "timed_out": False}
+
+        with patch.object(campaign, "run_command", side_effect=fake_agent), patch.object(campaign, "evaluate") as evaluate:
+            result = self.run_round("agent-changed-helper", agent=True)
+            evaluate.assert_not_called()
+        self.assertFalse(result["accepted"], result)
+        self.assertIn("copied runtime/skill changed", result["reason"])
+
+    def test_legacy_campaign_without_runtime_hashes_remains_readable(self):
+        state = self.state()
+        del state["runtime_sha256"]
+        write_json(self.output / "state.json", state)
+        self.change()
+        result = self.run_round("legacy")
+        self.assertTrue(result["accepted"], result)
+
     def test_external_source_symlink_cannot_enter_evaluation(self):
         self.change()
         outside = self.root / "external.metal"
@@ -241,7 +334,10 @@ print(json.dumps({"type": "turn.completed"}))
 
     def test_config_requires_real_commands_and_documented_layer_exception(self):
         for update in ({"smoke": []}, {"correctness": []}, {"shader_validation": {"enabled": False}},
-                       {"env": {"NI_LOCK_HELD": "1"}}):
+                       {"env": {"NI_LOCK_HELD": "1"}}, {"env": {"MTL_CAPTURE_ENABLED": "1"}},
+                       {"variables": {"skill_dir": "mutable-helper"}}, {"profile": "shell command"},
+                       {"profile": [[""]]}, {"profile": [["{unknown_path}"]]},
+                       {"profile": [["profiler", "{output}"]]}):
             with self.subTest(update=update):
                 write_json(self.config, {**self.spec, **update})
                 with self.assertRaises(ValueError):
