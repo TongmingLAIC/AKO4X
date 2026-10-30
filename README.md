@@ -88,6 +88,12 @@ For Mode 2 / Mode 3 setup, see [Closed-loop campaigns](docs/closed-loop.md).
 
 ## Quick Start
 
+For **native Metal / Apple-silicon inference**, use the separate
+[Metal campaign workflow](docs/metal.md). It includes a C++/Objective-C++/Metal
+RMSNorm example, a Kapitsa configuration template, Codex iteration, complete
+project snapshots, output gates and interleaved A/B/A/B measurements. It runs
+with Python's standard library; the FlashInfer installation below is not needed.
+
 > The commands below run **Mode 1** with the default benchmark (flashinfer-bench). For other benchmarks see [Porting](docs/porting.md); for closed-loop modes see [Closed-loop campaigns](docs/closed-loop.md).
 
 ```bash

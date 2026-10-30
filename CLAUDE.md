@@ -9,6 +9,15 @@ Codex-specific entrypoints and CPU checks: [docs/codex.md](docs/codex.md).
 Campaign agent selection is recorded in `campaign-agent.json`; each child
 records its selection in `.ako/agent.json`. No model is imposed by the harness.
 
+The native Metal port has an explicit, independent entry point:
+`metal_campaign.py` owns whole-project snapshots and bounded iterations;
+`metal_runtime.py` owns command execution, GPU locking and measurement gates.
+See [docs/metal.md](docs/metal.md). Its copied runtime is self-contained, uses
+the shared `agent_runtime.py`, and does not import the FlashInfer adapter.
+Do not route native projects through the legacy `kernel.py` archive helpers.
+`templates/skills/metal/` is the canonical native task skill. Keep configured
+commands CPU-only in `build`; all GPU execution requires `--allow-gpu`.
+
 ## Architecture
 
 Four layers:
@@ -20,7 +29,7 @@ Four layers:
    - **`agent/`** — `<agent>.json` (per-agent config, `claude.json` or `codex.json`; selected via `spawn.py --agent`) + `lessons-convention.md` + `hooks/` + `commands/`.
    - **`iterations.md`** — iteration-log template.
    - **`benchmark/evaluation.toml`** — benchmark-bound bench defaults + per-`op_type` tolerance overrides. `templates/benchmark/` is the active benchmark's template dir; its name is the stable slot `spawn.py` reads via the `BENCHMARK_DIR` constant.
-   - **`skills/<name>/{SKILL.md, <doc>.md}`** — 9 SKILLs (bench, benchmark, profiler-ncu, sanitizer, triton, cuda, cute-dsl, tilelang, cpp). `bench` carries generic noise-aware methodology; `benchmark` carries the active benchmark's schema (config.toml, status enum, scoring, baseline rule, fresh-inputs contract; default content is flashinfer-bench). The bench/benchmark split's load-bearing role is master FROZEN-scope enforcement — master reads `benchmark` SKILL's "Frozen for bench comparability" section at step 7.
+   - **`skills/<name>/{SKILL.md, <doc>.md}`** — 10 SKILLs: the default bench, benchmark, profiler-ncu, sanitizer, triton, cuda, cute-dsl, tilelang and cpp skills, plus the native campaign's metal skill. `bench` carries generic noise-aware methodology; `benchmark` carries the active benchmark's schema (config.toml, status enum, scoring, baseline rule, fresh-inputs contract; default content is flashinfer-bench). The bench/benchmark split's load-bearing role is master FROZEN-scope enforcement — master reads `benchmark` SKILL's "Frozen for bench comparability" section at step 7.
 
    **Single-active-benchmark assumption.** The repo assumes one active benchmark at a time (bench-runner + task set, both swap together) — no `benchmarks/` plural-container, no runtime selector flag. Multi-benchmark *coexistence* (several behind a per-spawn selector) is a different, larger thing — deferred under YAGNI until a second benchmark is actually needed.
 
