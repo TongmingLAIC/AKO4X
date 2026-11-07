@@ -15,10 +15,13 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from agent_runtime import AGENTS, SANDBOXES, render_instructions, validate_agent
 
 PARENT_DIR = Path(__file__).resolve().parent
 BASE_DIR = PARENT_DIR.parent
@@ -32,7 +35,7 @@ BENCHMARK_DIR = "benchmark"
 
 USAGE_LINE = (
     "Usage: python spawn.py --operator <name> [--dataset <path>] "
-    "[--backend local|modal] [--gpu <name>] [--agent claude] "
+    "[--backend local|modal] [--gpu <name>] [--agent claude|codex] "
     "[--kernel <path>] [--name <label>] [--strict-config] [--task <path>]"
 )
 
@@ -48,7 +51,8 @@ def parse_args():
                              "operator-prefix archive discovery.")
     parser.add_argument("--backend", default="local", choices=["local", "modal"])
     parser.add_argument("--gpu", default="")
-    parser.add_argument("--agent", default="claude")
+    parser.add_argument("--agent", default="claude", choices=AGENTS)
+    parser.add_argument("--codex-sandbox", default="workspace-write", choices=SANDBOXES)
     parser.add_argument("--kernel", default="")
     parser.add_argument("--name", default="", dest="label")
     parser.add_argument("--strict-config", action="store_true",
@@ -104,7 +108,7 @@ def load_agent_config(agent):
     config_path = PARENT_DIR / "templates" / "agent" / f"{agent}.json"
     if not config_path.is_file():
         sys.exit(f"Error: Agent config not found: {config_path}")
-    config = json.loads(config_path.read_text())
+    config = validate_agent(json.loads(config_path.read_text()))
     return config, config["task_filename"]
 
 
@@ -423,8 +427,10 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
                    strict_config=False):
     """Create child directory structure and populate with files."""
     # Create directories — flat solution/ (no language subdirectory)
-    for subdir in [".claude", "docs", "scripts", "solution"]:
+    agent = agent_config.get("name", "claude")
+    for subdir in [".ako", "docs", "scripts", "solution"]:
         (child_dir / subdir).mkdir(parents=True, exist_ok=True)
+    (child_dir / ".ako" / "agent.json").write_text(json.dumps(agent_config, indent=2) + "\n")
 
     # Copy common files
     shutil.copy2(PARENT_DIR / "templates" / "gitignore", child_dir / ".gitignore")
@@ -433,7 +439,9 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
     shutil.copy2(PARENT_DIR / "scripts" / "pack_solution.py", child_dir / "scripts" / "pack_solution.py")
     shutil.copy2(PARENT_DIR / "scripts" / "benchmark_adapter.py", child_dir / "scripts" / "benchmark_adapter.py")
     shutil.copy2(PARENT_DIR / "scripts" / "bench_utils.py", child_dir / "scripts" / "bench_utils.py")
-    shutil.copy2(PARENT_DIR / "scripts" / "CLAUDE.md", child_dir / "scripts" / "CLAUDE.md")
+    runtime_instructions = (PARENT_DIR / "scripts" / "CLAUDE.md").read_text()
+    (child_dir / "scripts" / agent_config["task_filename"]).write_text(
+        render_instructions(runtime_instructions, agent))
     # Language references live as SKILLs at .claude/skills/<skill>/. The
     # pure-PyTorch fallback (language=python) has no separate SKILL — its
     # convention is inlined under the benchmark SKILL's entry_point
@@ -701,11 +709,33 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
     shutil.copy2(PARENT_DIR / "scripts" / "diff_trajectory.py", child_dir / "scripts" / "diff_trajectory.py")
 
     diff_sh = '#!/bin/bash\ncd "$(dirname "$0")/.." || exit 1\npython scripts/diff_trajectory.py "$@"\n'
+    if agent == "codex":
+        shutil.copy2(PARENT_DIR / "scripts" / "advisory_review.py",
+                     child_dir / "scripts" / "advisory_review.py")
+        bench_sh += ('bench_status=$?\npython scripts/advisory_review.py "$@" || true\n'
+                     'exit "$bench_status"\n')
     for name, content in [("bench.sh", bench_sh), ("profile.sh", profile_sh),
                           ("sanitize.sh", sanitize_sh), ("diff.sh", diff_sh)]:
+        if agent == "codex":
+            # Non-interactive shells on macOS often have python3 but no python.
+            prelude = ('if [ -z "${AKO_PYTHON:-}" ]; then\n'
+                       f'    AKO_PYTHON={shlex.quote(sys.executable)}\nfi\n')
+            content = content.replace("#!/bin/bash\n", "#!/bin/bash\n" + prelude, 1)
+            content = content.replace("\npython scripts/", '\n"$AKO_PYTHON" scripts/')
         p = child_dir / "scripts" / name
         p.write_text(content)
         p.chmod(0o755)
+
+    skills_src = PARENT_DIR / "templates" / "skills"
+    skills_dst = child_dir / agent_config.get("skills_dir", ".claude/skills")
+    if skills_src.is_dir():
+        shutil.copytree(skills_src, skills_dst)
+        for doc in skills_dst.rglob("*.md"):
+            doc.write_text(render_instructions(doc.read_text(), agent))
+    if agent == "codex":
+        shutil.copy2(PARENT_DIR / "templates" / "agent" / "commands" / "review.md",
+                     child_dir / "docs" / "iteration-review.md")
+        return  # Claude's hook and permission schemas do not apply to Codex.
 
     # Copy advisory hook + slash commands into child env.
     # Hook fires after each labeled bench, printing a self-review prompt to
@@ -723,13 +753,6 @@ def populate_child(child_dir, *, operator, op_type, gpu, backend, kernel_path,
     commands_dst = child_dir / ".claude" / "commands"
     if commands_src.is_dir():
         shutil.copytree(commands_src, commands_dst)
-
-    # Copy SKILLs into child/.claude/skills/ for Claude Code progressive-disclosure discovery.
-    # Sub finds skills by name + description (frontmatter); body + supporting docs load on demand.
-    skills_src = PARENT_DIR / "templates" / "skills"
-    skills_dst = child_dir / ".claude" / "skills"
-    if skills_src.is_dir():
-        shutil.copytree(skills_src, skills_dst)
 
     # Generate .claude/settings.local.json (permissions + advisory hook).
     # The advisory hook is soft — it prints a self-review prompt to stderr
@@ -786,6 +809,7 @@ def main():
 
     # Load agent config
     agent_config, task_filename = load_agent_config(args.agent)
+    agent_config["sandbox"] = args.codex_sandbox
 
     # Resolve task template path
     task_path = PARENT_DIR / "templates" / "task.md"
@@ -869,7 +893,7 @@ def main():
 
     # Render and write task file
     task_text = task_path.read_text()
-    rendered = render_template(task_text, placeholders)
+    rendered = render_instructions(render_template(task_text, placeholders), args.agent)
     (child_dir / task_filename).write_text(rendered)
 
     # Git init
@@ -888,10 +912,10 @@ def main():
     print()
     print("Next steps:")
     print(f"  cd {child_dir}")
-    print(f"  claude")
+    print(f"  {args.agent}")
     print()
     print("  # Then send a prompt to start optimizing, e.g.:")
-    print('  > Read CLAUDE.md and optimize the kernel. Try your best.')
+    print(f'  > Read {task_filename} and optimize the kernel. Try your best.')
     print("=======================================")
 
 

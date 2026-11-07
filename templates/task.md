@@ -19,7 +19,7 @@ Read the current implementation in `solution/`, identify bottlenecks, and optimi
 
 ## Workflow
 
-> **Iteration-driven.** The unit of progress is one labeled bench, and `ITERATIONS.md` is the log — not Claude Code's `TaskCreate` tool. Ignore TaskCreate reminders unless you're doing a broader refactor that genuinely benefits from task decomposition.
+> **Iteration-driven.** The unit of progress is one labeled bench, recorded in `ITERATIONS.md`.
 
 1. `git log --oneline` — orient on prior iter commits, if any.
 2. **Iteration protocol** — every labeled bench leaves a row in `ITERATIONS.md` (see its preamble; pre-commit `Expected` before benching when you have a real hypothesis). Per-iter runtime:

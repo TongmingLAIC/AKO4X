@@ -146,6 +146,7 @@ Example:
 
 import argparse
 import datetime
+import json
 import os
 import re
 import subprocess
@@ -154,6 +155,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+from agent_runtime import AGENTS, SANDBOXES, render_instructions
 
 
 def _run(cmd, **kw):
@@ -245,8 +248,9 @@ def make_branch_name(operator):
     return f"campaign/{operator}/{ts}"
 
 
-def render_readme_stub(operator, family, backend, gpu, mode, branch):
+def render_readme_stub(operator, family, backend, gpu, mode, branch, agent="claude"):
     mode_desc = "no harness modification" if mode == 2 else "harness co-evolution"
+    task_file = "AGENTS.md" if agent == "codex" else "CLAUDE.md"
     return f"""# AKO4X — Campaign Branch
 
 This branch is a **closed-loop campaign workspace**, not the main repo.
@@ -258,9 +262,10 @@ This branch is a **closed-loop campaign workspace**, not the main repo.
 | Backend / GPU | `{backend}` / `{gpu}` |
 | Mode | `{mode}` ({mode_desc}) |
 | Branch | `{branch}` |
+| Agent | `{agent}` |
 
-Root `CLAUDE.md` on this branch is `master/MASTER.md` (the closed-loop
-orchestrator protocol) — that's the agent context master CC needs, not
+Root `{task_file}` on this branch is `master/MASTER.md` (the closed-loop
+orchestrator protocol) — that's the agent context the master needs, not
 the dev guide that lives on `main`.
 
 For **developer documentation**, switch to `main`:
@@ -278,7 +283,8 @@ reverts it before landing on main.
 """
 
 
-def render_commit_message(operator, family, backend, gpu, mode, base_sha, branch):
+def render_commit_message(operator, family, backend, gpu, mode, base_sha, branch, agent="claude"):
+    task_file = "AGENTS.md" if agent == "codex" else "CLAUDE.md"
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M %z").strip() or \
          datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     return (
@@ -289,13 +295,15 @@ def render_commit_message(operator, family, backend, gpu, mode, base_sha, branch
         f"Backend:  {backend}\n"
         f"GPU:      {gpu}\n"
         f"Mode:     {mode}\n"
+        f"Agent:    {agent}\n"
         f"Started:  {ts} (from main @ {base_sha})\n"
         f"Branch:   {branch}\n"
         f"Script:   scripts/campaign_start.py\n"
         f"\n"
         f"Files changed by this commit:\n"
-        f"  CLAUDE.md   <- replaced with master/MASTER.md content\n"
+        f"  {task_file}   <- replaced with master/MASTER.md content\n"
         f"  README.md   <- replaced with campaign stub\n"
+        f"  campaign-agent.json <- agent selection for subsequent rounds\n"
         f"\n"
         f"Wrap-up: see scripts/campaign_start.py top-of-file\n"
         f"`CAMPAIGN WRAP-UP PROTOCOL` block. This commit must NOT be\n"
@@ -324,6 +332,8 @@ def main():
                              "commit: 2 = no harness modification (default); "
                              "3 = harness co-evolution. Declare the SAME mode in "
                              "the master CC prompt so the locked baseline matches.")
+    parser.add_argument("--agent", default="claude", choices=AGENTS)
+    parser.add_argument("--codex-sandbox", default="workspace-write", choices=SANDBOXES)
     args = parser.parse_args()
 
     validate_operator(args.operator)
@@ -331,26 +341,30 @@ def main():
     dataset_preflight(args.operator)
     family = derive_family(args.operator)
     branch = make_branch_name(args.operator)
+    task_file = "AGENTS.md" if args.agent == "codex" else "CLAUDE.md"
+    master_md = REPO_ROOT / "master" / "MASTER.md"
+    if not master_md.is_file():
+        sys.exit(f"Error: {master_md} not found. Cannot create the campaign.")
 
     # 1. Create + check out branch
     _run(["git", "checkout", "-b", branch])
 
     # 2. Verify source-of-truth file exists, then swap
-    master_md = REPO_ROOT / "master" / "MASTER.md"
-    claude_md = REPO_ROOT / "CLAUDE.md"
+    task_md = REPO_ROOT / task_file
     readme = REPO_ROOT / "README.md"
-    if not master_md.is_file():
-        sys.exit(f"Error: {master_md} not found. Cannot swap into CLAUDE.md.")
-    claude_md.write_text(master_md.read_text())
+    task_md.write_text(render_instructions(master_md.read_text(), args.agent))
+    (REPO_ROOT / "campaign-agent.json").write_text(json.dumps({
+        "name": args.agent, "sandbox": args.codex_sandbox,
+    }, indent=2) + "\n")
     readme.write_text(render_readme_stub(
-        args.operator, family, args.backend, args.gpu, args.mode, branch,
+        args.operator, family, args.backend, args.gpu, args.mode, branch, args.agent,
     ))
 
     # 3. Commit the swap with self-documenting metadata
     commit_msg = render_commit_message(
-        args.operator, family, args.backend, args.gpu, args.mode, base_sha, branch,
+        args.operator, family, args.backend, args.gpu, args.mode, base_sha, branch, args.agent,
     )
-    _run(["git", "add", "CLAUDE.md", "README.md"])
+    _run(["git", "add", task_file, "README.md", "campaign-agent.json"])
     _run(["git", "commit", "-m", commit_msg])
     commit_sha = _run(["git", "rev-parse", "--short", "HEAD"])
 
@@ -371,12 +385,12 @@ def main():
     if not fib_dataset:
         print("WARNING: AKO_DATASET_PATH is not set in this shell. Master CC")
         print("         will need it to spawn children. Set before starting")
-        print("         your claude session, e.g.:")
+        print(f"         your {args.agent} session, e.g.:")
         print('           export AKO_DATASET_PATH="/path/to/flashinfer-trace"')
         print()
     print("Next steps:")
     print(f"  1. cd {REPO_ROOT}")
-    print(f"  2. Start master CC: `claude` (root CLAUDE.md is now the protocol)")
+    print(f"  2. Start the master: `{args.agent}` (root {task_file} is now the protocol)")
     print(f"  3. Send the initial prompt to master CC. This campaign is set up")
     print(f"     for Mode {args.mode} ({mode_desc}); declare the SAME mode in the")
     print(f"     prompt so the locked baseline matches the campaign-mode commit:")
