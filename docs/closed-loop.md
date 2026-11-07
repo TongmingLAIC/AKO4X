@@ -111,6 +111,13 @@ from each round — the sub reports what was missing, the master decides what to
 keep. (The master is reactive-only: it never self-proposes harness edits;
 improvements come exclusively through the sub's phase-2 retrospective.)
 
+## Agent selection
+
+Use `--agent codex` with `campaign_start.py` to run the master and children
+with Codex. It writes `AGENTS.md` and records `campaign-agent.json`; subsequent
+rounds inherit the selection. Claude remains the default. See
+[Codex execution](codex.md) for session handling and permission settings.
+
 ## Running a campaign
 
 One-time setup per campaign, from a clean `main`:
@@ -124,7 +131,7 @@ python scripts/campaign_start.py --operator <operator_name> \
 `--mode` (`2` / `3`, default `2`) are optional. The script:
 
 1. creates a campaign branch `campaign/<operator>/<YYYYMMDD-HHMM>`,
-2. replaces root `CLAUDE.md` with `master/MASTER.md` (so the master agent's
+2. replaces root `CLAUDE.md` (or `AGENTS.md` for Codex) with `master/MASTER.md` (so the master agent's
    auto-loaded context **is** the orchestrator protocol),
 3. replaces root `README.md` with a campaign stub,
 4. commits the swap as a self-documenting `campaign-mode:` commit (carries

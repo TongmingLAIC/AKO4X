@@ -130,6 +130,9 @@ arguments lists available operators. The module docstring at the top of
 run, custom dataset, custom task template). For closed-loop campaigns
 (Mode 2 / Mode 3), see [Closed-loop campaigns](closed-loop.md) instead.
 
+For Codex, add `--agent codex` to spawn and launch `codex` in the child.
+See [Codex execution](codex.md) for discovery, permissions, and headless sessions.
+
 ## Working with the agent
 
 Once `claude` is running inside the child env, the agent reads its own
@@ -138,7 +141,7 @@ operator-side things worth knowing.
 
 ### Permissions
 
-Each child env includes `.claude/settings.local.json` controlling what
+Each Claude child env includes `.claude/settings.local.json` controlling what
 tools the agent may use. By default broad access is granted (file I/O,
 bash, web search, etc.); edit it before launch to restrict. For fully
 unattended runs, Claude Code supports:

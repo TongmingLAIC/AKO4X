@@ -16,7 +16,7 @@ Common places gaps show up (illustrative, not exhaustive):
 
 ---
 
-**Output**: use the Write tool to save your retrospective to `PROPOSALS.md` at the child env root. The file IS your output channel — the master reads it directly. **Always write the file**, even when there are no proposals to make. Body is one of:
+**Output**: save your retrospective to `PROPOSALS.md` at the child env root. The file IS your output channel — the master reads it directly. **Always write the file**, even when there are no proposals to make. Body is one of:
 
 **(a) literal `none`** — phase-1 went smoothly:
 

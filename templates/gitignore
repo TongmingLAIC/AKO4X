@@ -8,6 +8,8 @@ __pycache__/
 *.o
 *.a
 *.dylib
+.ako/
+.codex/
 
 # Benchmark artifacts
 trajectory/

@@ -1,0 +1,29 @@
+{
+  "name": "Kapitsa native Metal decode optimization (configure model and small kernel test first)",
+  "editable": ["src/kernels/*.metal"],
+  "variables": {
+    "model": "/absolute/path/to/model",
+    "floor": "tools/logit_floors/MODEL.json",
+    "kernel_smoke": "/absolute/path/to/small-kernel-check"
+  },
+  "env": {"KAPITSA_NO_AUTO_UPDATE": "1"},
+  "build": [
+    ["cmake", "-S", "{repo}", "-B", "{build}", "-DCMAKE_BUILD_TYPE=Release"],
+    ["cmake", "--build", "{build}", "--parallel", "4", "--target", "kapitsa", "logit_dump"]
+  ],
+  "smoke": [["{kernel_smoke}", "{repo}", "{build}"]],
+  "correctness": [
+    ["{baseline_build}/logit_dump", "{model}", "{evidence}/logits-baseline", "--corpus", "{baseline}/bench/corpus.txt"],
+    ["{candidate_build}/logit_dump", "{model}", "{evidence}/logits-candidate", "--from", "{evidence}/logits-baseline"],
+    ["{python}", "{baseline}/tools/logit_compare.py", "{evidence}/logits-baseline", "{evidence}/logits-candidate", "--floor", "{baseline}/{floor}", "--json", "{evidence}/logit-gate.json"]
+  ],
+  "benchmark": {
+    "command": ["{build}/kapitsa", "bench", "--model", "{model}", "--quick", "--json", "--out", "{output}"],
+    "metric": "results.decode.median_tps",
+    "direction": "higher",
+    "pairs": 2,
+    "min_speedup": 1.02,
+    "max_relative_spread": 0.05
+  },
+  "timeout_seconds": 7200
+}

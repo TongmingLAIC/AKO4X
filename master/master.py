@@ -31,9 +31,12 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+from agent_runtime import codex_outcome, launch_command, read_agent, render_instructions, validate_agent
 
 PKG_DIR = Path(__file__).resolve().parent  # AKO4X/master/
 ROOT = PKG_DIR.parent                      # AKO4X/
@@ -243,11 +246,14 @@ def _run_bounded(
     pre-fix master.py returned timed_out=True and the step-4 branch
     would have routed an otherwise-clean round to archive_failed.)
     """
-    proc = subprocess.Popen(
-        cmd, cwd=str(cwd), text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(cwd), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return "", str(exc), 127, False
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
         return stdout, stderr, proc.returncode, False
@@ -421,6 +427,7 @@ def spawn_child(
     *,
     family: str,
     dataset_path: Path | None = None,
+    agent: str | None = None,
 ) -> Path:
     """Thin wrapper over spawn.py. Returns the created child_dir Path.
 
@@ -449,6 +456,11 @@ def spawn_child(
     _validate_safe_name(name_label, kind="name_label")
     _validate_safe_name(family, kind="family")
     gpu, backend = _read_campaign_env(family)
+    agent_config = read_agent(ROOT / "campaign-agent.json")
+    if agent is not None:
+        agent_config["name"] = agent
+    # Validate before spawning, including explicit overrides.
+    agent_config = validate_agent(agent_config)
 
     # Guard the "continuing campaign + parent=None" footgun. parent=None is
     # documented (above) as the brand-new round-1 bootstrap only — spawn.py
@@ -478,12 +490,14 @@ def spawn_child(
                 )
 
     cmd = [
-        "python3", str(ROOT / "spawn.py"),
+        sys.executable, str(ROOT / "spawn.py"),
         "--operator", operator,
         "--family", family,
         "--gpu", gpu,
         "--backend", backend,
         "--name", name_label,
+        "--agent", agent_config["name"],
+        "--codex-sandbox", agent_config["sandbox"],
     ]
     if parent_kernel_path is not None:
         cmd += ["--kernel", str(parent_kernel_path)]
@@ -531,9 +545,8 @@ def spawn_child(
 def run_sub_phase1(child_dir: Path, prompt: str, *, timeout: int = 18000) -> SubResult:
     """Drive sub through phase-1 (kernel optimization).
 
-    Generates a UUID and passes it via `--session-id` (the Claude Code CLI
-    accepts an externally-supplied valid UUID); phase-2 reuses it via
-    `claude --resume <session_id>`.
+    Uses the child's recorded agent. Claude accepts a caller-generated UUID;
+    Codex supplies its thread ID in JSONL. Phase 2 resumes that exact session.
 
     Captures stdout into `<child>/.ako/phase1-transcript.jsonl`, stderr into
     `<child>/.ako/phase1-stderr.log`, and preserves the last ~4KB of stderr
@@ -544,22 +557,16 @@ def run_sub_phase1(child_dir: Path, prompt: str, *, timeout: int = 18000) -> Sub
     Caller decides outcome branch (improved / no-improvement / crash /
     timeout) from exit_status, timed_out, and presence of final_kernel_path.
     """
-    session_id = str(uuid.uuid4())
     ako = child_dir / ".ako"
     ako.mkdir(exist_ok=True)
-    (ako / "session-id.txt").write_text(session_id + "\n")  # phase-2 resume handle; NOT the round label
+    config = read_agent(ako / "agent.json")
+    session_id = str(uuid.uuid4()) if config["name"] == "claude" else ""
+    (ako / "session-id.txt").unlink(missing_ok=True)
 
     transcript_path = ako / "phase1-transcript.jsonl"
     stderr_log = ako / "phase1-stderr.log"
 
-    # `--output-format stream-json` with `--print` requires `--verbose`
-    # (Claude CLI >= ~2.1 enforces this; without it the sub exits 1 instantly).
-    cmd = [
-        "claude", "--print", "--verbose",
-        "--output-format", "stream-json",
-        "--session-id", session_id,
-        prompt,
-    ]
+    cmd = launch_command(config, prompt, session_id)
     stdout, stderr, exit_status, timed_out = _run_bounded(
         cmd, cwd=child_dir, timeout=timeout
     )
@@ -570,6 +577,15 @@ def run_sub_phase1(child_dir: Path, prompt: str, *, timeout: int = 18000) -> Sub
     # stderr to a FileNotFoundError when sub-side cleanup races us.
     ako.mkdir(parents=True, exist_ok=True)
     transcript_path.write_text(stdout)
+    if config["name"] == "codex":
+        session_id, error = codex_outcome(stdout)
+        if error:
+            stderr += f"\n{error}\n"
+            if exit_status == 0:
+                exit_status = 1
+    (ako / "agent.json").write_text(json.dumps(config, indent=2) + "\n")
+    if session_id:
+        (ako / "session-id.txt").write_text(session_id + "\n")
     stderr_log.write_text(stderr)
     stderr_tail = stderr[-4096:] if len(stderr) > 4096 else stderr
 
@@ -613,8 +629,8 @@ def send_retrospective_prompt(
 ) -> Phase2Result:
     """Phase-2: continue the same sub session and inject the retrospective prompt.
 
-    Uses `claude --resume <session_id> --print --output-format stream-json`
-    so the sub keeps phase-1 context (transcript, ITERATIONS.md, git history,
+    Resumes the recorded agent's exact session so it keeps phase-1 context
+    (transcript, ITERATIONS.md, git history,
     bench output) when reflecting on harness gaps. The retrospective template
     (`templates/retrospective.md`, a ROOT-anchored default) is read and
     passed as the prompt argument.
@@ -637,15 +653,15 @@ def send_retrospective_prompt(
         template_text = template_text.rstrip() + "\n\n---\n\n" + scope_path.read_text()
     ako = child_dir / ".ako"
     ako.mkdir(exist_ok=True)
+    config = read_agent(ako / "agent.json")
+    recorded = ako / "session-id.txt"
+    if not session_id or (recorded.is_file() and recorded.read_text().strip() != session_id):
+        raise ValueError("retrospective requires the recorded phase-1 session ID")
+    template_text = render_instructions(template_text, config["name"])
     transcript_path = ako / "phase2-transcript.jsonl"
     stderr_log = ako / "phase2-stderr.log"
 
-    cmd = [
-        "claude", "--resume", session_id,
-        "--print", "--verbose",  # stream-json + --print requires --verbose (see run_sub_phase1)
-        "--output-format", "stream-json",
-        template_text,
-    ]
+    cmd = launch_command(config, template_text, session_id, resume=True)
     stdout, stderr, exit_status, timed_out = _run_bounded(
         cmd, cwd=child_dir, timeout=timeout
     )
@@ -654,6 +670,12 @@ def send_retrospective_prompt(
     # run_sub_phase1 for the failure mode that motivated this).
     ako.mkdir(parents=True, exist_ok=True)
     transcript_path.write_text(stdout)
+    if config["name"] == "codex":
+        _, error = codex_outcome(stdout, session_id)
+        if error:
+            stderr += f"\n{error}\n"
+            if exit_status == 0:
+                exit_status = 1
     stderr_log.write_text(stderr)
     stderr_tail = stderr[-4096:] if len(stderr) > 4096 else stderr
 
