@@ -126,7 +126,11 @@ def load_evaluation_config(op_type):
     try:
         with open(eval_path, "rb") as f:
             eval_config = tomllib.load(f)
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"WARNING: Failed to parse {eval_path}: {e}. "
+              f"Frozen benchmark parameters will be empty — scores may not be comparable.",
+              file=sys.stderr)
         return {}
     merged = {}
     merged.update(eval_config.get("default", {}))
